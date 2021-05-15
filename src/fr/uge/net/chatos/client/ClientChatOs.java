@@ -17,6 +17,8 @@ import java.util.Queue;
 import java.util.Scanner;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ClientChatOs {
 
@@ -144,6 +146,12 @@ public class ClientChatOs {
          System.out.println("Login name cannot exceed 9 caracters");
          return;
       }
+      Pattern pattern = Pattern.compile("[^a-zA-Z0-9]");
+      Matcher matcher = pattern.matcher(args[0]);
+      if (matcher.find()) {
+         System.out.println("Login cannot contains special characters");
+         return;
+      }
       new ClientChatOs(args[0], new InetSocketAddress(args[1], Integer.parseInt(args[2]))).launch();
    }
 
@@ -264,6 +272,8 @@ public class ClientChatOs {
       private void doRead() throws IOException {
          if (sc.read(bbin) == -1) {
             closed = true;
+            updateInterestOps();
+            return;
          }
          processIn();
          updateInterestOps();
@@ -295,11 +305,22 @@ public class ClientChatOs {
                         return;
                   }
                }
+            case 0:
+               treatError(bbin.getInt());
+               bbin.compact();
+               break;
             default:
                // TODO Trame erreur
                return;
          }
 
+      }
+
+      private void treatError(int errorCode) {
+         if (errorCode == 1) {
+            System.out.println("Login already used by another client");
+            silentlyClose();
+         }
       }
 
       private void silentlyClose() {

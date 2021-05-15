@@ -73,7 +73,7 @@ public class ServerChatOs {
                context.doRead();
                if (context.pseudo == null || clients.containsKey(context.pseudo)) {
                   logger.info("Login error");
-                  // TODO Trame erreur fermer la connexion
+                  context.sendError(1);
                   return;
                }
                clients.put(context.pseudo, key);
@@ -105,6 +105,7 @@ public class ServerChatOs {
          if (key.attachment() != null) {
             var context = (Context) key.attachment();
             if (context.pseudo != null) {
+               message.setOpcode(2);
                context.queueMessage(message);
             }
          }
@@ -186,7 +187,6 @@ public class ServerChatOs {
          if (pseudo == null) {
             bbin.flip();
             if (bbin.get() != 1) {
-               // TODO Erreur et fermer la connexion
                return;
             }
             bbin.compact();
@@ -253,7 +253,7 @@ public class ServerChatOs {
             var pseudo = UTF.encode(message.getPseudo());
             var msg = UTF.encode(message.getMsg());
             if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining()) {
-               bbout.put((byte) 2).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
+               bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
             } else {
                queue.add(message);
             }
@@ -309,6 +309,13 @@ public class ServerChatOs {
          sc.write(bbout);
          bbout.compact();
          processOut();
+         updateInterestOps();
+      }
+
+      public void sendError(int errorCode) {
+         if (bbout.remaining() > 1 + Integer.BYTES) {
+            bbout.put((byte) 0).putInt(errorCode);
+         }
          updateInterestOps();
       }
    }
