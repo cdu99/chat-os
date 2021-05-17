@@ -214,11 +214,11 @@ public class ServerChatOs {
                case 2:
                   bbin.compact();
                   for (; ; ) {
-                     switch (messageReader.process(bbin)) {
+                     switch (stringReader.process(bbin)) {
                         case DONE:
-                           var message = messageReader.get();
-                           server.broadcast(message);
-                           messageReader.reset();
+                           var msg = stringReader.get();
+                           server.broadcast(new Message(pseudo, msg));
+                           stringReader.reset();
                            break;
                         case REFILL:
                            return;

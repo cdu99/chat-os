@@ -85,9 +85,8 @@ public class ClientChatOs {
             default:
                // Message to all
                var bbMsg = UTF.encode(msg);
-               var bbPseudo = UTF.encode(pseudo);
-               var bb = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbMsg.remaining() + bbPseudo.remaining());
-               bb.put((byte) 2).putInt(bbPseudo.remaining()).put(bbPseudo).putInt(bbMsg.remaining()).put(bbMsg);
+               var bb = ByteBuffer.allocate(1 + Integer.BYTES + bbMsg.remaining());
+               bb.put((byte) 2).putInt(bbMsg.remaining()).put(bbMsg);
                uniqueContext.queueMessage(bb.flip());
          }
       }
