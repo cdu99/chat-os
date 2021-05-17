@@ -74,6 +74,8 @@ public class ServerChatOs {
                if (context.pseudo == null || clients.containsKey(context.pseudo)) {
                   logger.info("Login error");
                   context.sendError(1);
+                  context.doWrite();
+                  silentlyClose(key);
                   return;
                }
                clients.put(context.pseudo, key);
