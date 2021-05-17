@@ -121,6 +121,10 @@ public class ServerChatOs {
       }
    }
 
+   private void removeClient(String pseudo) {
+      clients.remove(pseudo);
+   }
+
    public static void main(String[] args) throws NumberFormatException, IOException {
       if (args.length != 1) {
          usage();
@@ -290,6 +294,7 @@ public class ServerChatOs {
       private void silentlyClose() {
          try {
             sc.close();
+            server.removeClient(pseudo);
          } catch (IOException e) {
             // ignore exception
          }
