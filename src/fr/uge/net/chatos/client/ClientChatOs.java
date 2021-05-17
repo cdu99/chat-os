@@ -320,6 +320,7 @@ public class ClientChatOs {
          if (errorCode == 1) {
             System.out.println("Login already used by another client");
             silentlyClose();
+            closed = true;
          }
       }
 
