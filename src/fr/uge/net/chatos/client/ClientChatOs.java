@@ -331,19 +331,24 @@ public class ClientChatOs {
                   }
                }
             default:
-               // Unrecognize opcode
-               // TODO Trame erreur
-               bbin.compact();
+               System.out.println("ERROR, DISCONNECTION");
+//               bbin.compact();
+               silentlyClose();
                return;
          }
 
       }
 
       private void treatError(int errorCode) {
-         if (errorCode == 1) {
-            System.out.println("Login already used by another client");
-            silentlyClose();
-            closed = true;
+         switch (errorCode){
+            case 1:
+               System.out.println("Login already used by another client");
+               silentlyClose();
+               closed = true;
+               return;
+            case 2:
+               System.out.println("Receiver does not exist");
+               return;
          }
       }
 

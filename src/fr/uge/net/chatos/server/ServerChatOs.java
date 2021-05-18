@@ -115,18 +115,16 @@ public class ServerChatOs {
    }
 
    // Private message @
-   private void privateMessage(String sender, String receiver, String msg) {
+   private boolean privateMessage(String sender, String receiver, String msg) {
       var receiverKey = clients.get(receiver);
       if (receiverKey == null) {
-         // ERRORORO
-         logger.info("WOROROROROOR");
-         // TODO Trame erreur destinaireresr pas la
-         return;
+         return false;
       }
       var context = (Context) receiverKey.attachment();
       var message = new Message(sender, msg);
       message.setOpcode(3);
       context.queueMessage(message);
+      return true;
    }
 
    private void silentlyClose(SelectionKey key) {
@@ -252,8 +250,11 @@ public class ServerChatOs {
                            var message = messageReader.get();
                            var receiver = message.getPseudo();
                            var msg = message.getMsg();
-                           server.privateMessage(pseudo, receiver, msg);
+                           var isReceiverPresent = server.privateMessage(pseudo, receiver, msg);
                            messageReader.reset();
+                           if (!isReceiverPresent) {
+                              sendError(2);
+                           }
                            break;
                         case REFILL:
                            return;
