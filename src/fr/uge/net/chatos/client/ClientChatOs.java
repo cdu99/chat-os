@@ -77,7 +77,15 @@ public class ClientChatOs {
          var msg = commandQueue.remove();
          switch (msg.charAt(0)) {
             case '@':
-               // TODO
+               msg = msg.substring(1);
+               var privateMessage = msg.split(" ", 2);
+               var bbPrivateMsg = UTF.encode(privateMessage[1]);
+               var bbPseudo = UTF.encode(privateMessage[0]);
+               var bbPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbPrivateMsg.remaining()
+                     + bbPseudo.remaining());
+               bbPrivate.put((byte) 3).putInt(bbPseudo.remaining()).put(bbPseudo)
+                     .putInt(bbPrivateMsg.remaining()).put(bbPrivateMsg);
+               uniqueContext.queueMessage(bbPrivate.flip());
                return;
             case '/':
                // TODO
@@ -85,9 +93,8 @@ public class ClientChatOs {
             default:
                // Message to all
                var bbMsg = UTF.encode(msg);
-               var bbPseudo = UTF.encode(pseudo);
-               var bb = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbMsg.remaining() + bbPseudo.remaining());
-               bb.put((byte) 2).putInt(bbPseudo.remaining()).put(bbPseudo).putInt(bbMsg.remaining()).put(bbMsg);
+               var bb = ByteBuffer.allocate(1 + Integer.BYTES + bbMsg.remaining());
+               bb.put((byte) 2).putInt(bbMsg.remaining()).put(bbMsg);
                uniqueContext.queueMessage(bb.flip());
          }
       }
@@ -272,8 +279,6 @@ public class ClientChatOs {
       private void doRead() throws IOException {
          if (sc.read(bbin) == -1) {
             closed = true;
-            updateInterestOps();
-            return;
          }
          processIn();
          updateInterestOps();
@@ -309,18 +314,41 @@ public class ClientChatOs {
                treatError(bbin.getInt());
                bbin.compact();
                break;
+            case 3:
+               bbin.compact();
+               for (; ; ) {
+                  switch (messageReader.process(bbin)) {
+                     case DONE:
+                        var message = messageReader.get();
+                        System.out.println("Private message from " + message.getPseudo() + ": " + message.getMsg());
+                        messageReader.reset();
+                        break;
+                     case REFILL:
+                        return;
+                     case ERROR:
+                        closed = true;
+                        return;
+                  }
+               }
             default:
-               // TODO Trame erreur
+               System.out.println("ERROR, DISCONNECTION");
+//               bbin.compact();
+               silentlyClose();
                return;
          }
 
       }
 
       private void treatError(int errorCode) {
-         if (errorCode == 1) {
-            System.out.println("Login already used by another client");
-            silentlyClose();
-            closed = true;
+         switch (errorCode){
+            case 1:
+               System.out.println("Login already used by another client");
+               silentlyClose();
+               closed = true;
+               return;
+            case 2:
+               System.out.println("Receiver does not exist");
+               return;
          }
       }
 

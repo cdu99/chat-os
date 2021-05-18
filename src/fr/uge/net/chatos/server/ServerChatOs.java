@@ -74,6 +74,8 @@ public class ServerChatOs {
                if (context.pseudo == null || clients.containsKey(context.pseudo)) {
                   logger.info("Login error");
                   context.sendError(1);
+                  context.doWrite();
+                  silentlyClose(key);
                   return;
                }
                clients.put(context.pseudo, key);
@@ -112,6 +114,19 @@ public class ServerChatOs {
       }
    }
 
+   // Private message @
+   private boolean privateMessage(String sender, String receiver, String msg) {
+      var receiverKey = clients.get(receiver);
+      if (receiverKey == null) {
+         return false;
+      }
+      var context = (Context) receiverKey.attachment();
+      var message = new Message(sender, msg);
+      message.setOpcode(3);
+      context.queueMessage(message);
+      return true;
+   }
+
    private void silentlyClose(SelectionKey key) {
       Channel sc = key.channel();
       try {
@@ -119,6 +134,10 @@ public class ServerChatOs {
       } catch (IOException e) {
          // ignore exception
       }
+   }
+
+   private void removeClient(String pseudo) {
+      clients.remove(pseudo);
    }
 
    public static void main(String[] args) throws NumberFormatException, IOException {
@@ -210,11 +229,32 @@ public class ServerChatOs {
                case 2:
                   bbin.compact();
                   for (; ; ) {
+                     switch (stringReader.process(bbin)) {
+                        case DONE:
+                           var msg = stringReader.get();
+                           server.broadcast(new Message(pseudo, msg));
+                           stringReader.reset();
+                           break;
+                        case REFILL:
+                           return;
+                        case ERROR:
+                           silentlyClose();
+                           return;
+                     }
+                  }
+               case 3:
+                  bbin.compact();
+                  for (; ; ) {
                      switch (messageReader.process(bbin)) {
                         case DONE:
                            var message = messageReader.get();
-                           server.broadcast(message);
+                           var receiver = message.getPseudo();
+                           var msg = message.getMsg();
+                           var isReceiverPresent = server.privateMessage(pseudo, receiver, msg);
                            messageReader.reset();
+                           if (!isReceiverPresent) {
+                              sendError(2);
+                           }
                            break;
                         case REFILL:
                            return;
@@ -290,6 +330,7 @@ public class ServerChatOs {
       private void silentlyClose() {
          try {
             sc.close();
+            server.removeClient(pseudo);
          } catch (IOException e) {
             // ignore exception
          }
