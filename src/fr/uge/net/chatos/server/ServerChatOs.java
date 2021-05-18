@@ -114,6 +114,21 @@ public class ServerChatOs {
       }
    }
 
+   // Private message @
+   private void privateMessage(String sender, String receiver, String msg) {
+      var receiverKey = clients.get(receiver);
+      if (receiverKey == null) {
+         // ERRORORO
+         logger.info("WOROROROROOR");
+         // TODO Trame erreur destinaireresr pas la
+         return;
+      }
+      var context = (Context) receiverKey.attachment();
+      var message = new Message(sender, msg);
+      message.setOpcode(3);
+      context.queueMessage(message);
+   }
+
    private void silentlyClose(SelectionKey key) {
       Channel sc = key.channel();
       try {
@@ -221,6 +236,24 @@ public class ServerChatOs {
                            var msg = stringReader.get();
                            server.broadcast(new Message(pseudo, msg));
                            stringReader.reset();
+                           break;
+                        case REFILL:
+                           return;
+                        case ERROR:
+                           silentlyClose();
+                           return;
+                     }
+                  }
+               case 3:
+                  bbin.compact();
+                  for (; ; ) {
+                     switch (messageReader.process(bbin)) {
+                        case DONE:
+                           var message = messageReader.get();
+                           var receiver = message.getPseudo();
+                           var msg = message.getMsg();
+                           server.privateMessage(pseudo, receiver, msg);
+                           messageReader.reset();
                            break;
                         case REFILL:
                            return;

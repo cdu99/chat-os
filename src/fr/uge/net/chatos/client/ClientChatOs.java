@@ -77,7 +77,15 @@ public class ClientChatOs {
          var msg = commandQueue.remove();
          switch (msg.charAt(0)) {
             case '@':
-               // TODO
+               msg = msg.substring(1);
+               var privateMessage = msg.split(" ", 2);
+               var bbPrivateMsg = UTF.encode(privateMessage[1]);
+               var bbPseudo = UTF.encode(privateMessage[0]);
+               var bbPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbPrivateMsg.remaining()
+                     + bbPseudo.remaining());
+               bbPrivate.put((byte) 3).putInt(bbPseudo.remaining()).put(bbPseudo)
+                     .putInt(bbPrivateMsg.remaining()).put(bbPrivateMsg);
+               uniqueContext.queueMessage(bbPrivate.flip());
                return;
             case '/':
                // TODO
@@ -271,8 +279,6 @@ public class ClientChatOs {
       private void doRead() throws IOException {
          if (sc.read(bbin) == -1) {
             closed = true;
-            updateInterestOps();
-            return;
          }
          processIn();
          updateInterestOps();
@@ -308,8 +314,26 @@ public class ClientChatOs {
                treatError(bbin.getInt());
                bbin.compact();
                break;
+            case 3:
+               bbin.compact();
+               for (; ; ) {
+                  switch (messageReader.process(bbin)) {
+                     case DONE:
+                        var message = messageReader.get();
+                        System.out.println("Private message from " + message.getPseudo() + ": " + message.getMsg());
+                        messageReader.reset();
+                        break;
+                     case REFILL:
+                        return;
+                     case ERROR:
+                        closed = true;
+                        return;
+                  }
+               }
             default:
+               // Unrecognize opcode
                // TODO Trame erreur
+               bbin.compact();
                return;
          }
 
