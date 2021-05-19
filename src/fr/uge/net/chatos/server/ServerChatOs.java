@@ -140,6 +140,19 @@ public class ServerChatOs {
       clients.remove(pseudo);
    }
 
+   private boolean requestPrivateConnexion(String requester, String target) {
+      var targetKey = clients.get(target);
+      if (targetKey == null) {
+         return false;
+      }
+      var targetContext = (Context) targetKey.attachment();
+      var request = new Message(requester, target);
+      request.setOpcode(5);
+      targetContext.queueMessage(request);
+      return true;
+   }
+
+
    public static void main(String[] args) throws NumberFormatException, IOException {
       if (args.length != 1) {
          usage();
@@ -255,6 +268,26 @@ public class ServerChatOs {
                            if (!isReceiverPresent) {
                               sendError(2);
                            }
+                           break;
+                        case REFILL:
+                           return;
+                        case ERROR:
+                           silentlyClose();
+                           return;
+                     }
+                  }
+               case 5:
+                  bbin.compact();
+                  for (; ; ) {
+                     // (5) requester target
+                     // pseudo --> requester; msg --> target
+                     switch (messageReader.process(bbin)) {
+                        case DONE:
+                           var message = messageReader.get();
+                           if (!server.requestPrivateConnexion(message.getPseudo(), message.getMsg())) {
+                              sendError(2);
+                           }
+                           messageReader.reset();
                            break;
                         case REFILL:
                            return;

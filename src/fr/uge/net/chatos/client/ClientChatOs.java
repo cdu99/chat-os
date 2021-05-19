@@ -88,7 +88,22 @@ public class ClientChatOs {
                uniqueContext.queueMessage(bbPrivate.flip());
                return;
             case '/':
-               // TODO
+               // Authentification
+               msg = msg.substring(1);
+               var authentification = msg.split(" ", 2);
+               if (authentification.length == 1) {
+                  // Fermer la connexino private si yen a une
+                  logger.info("Fermer la connexion WIP");
+                  return;
+               }
+               // if ya pas de connexion privé vers target authentification[0]
+               var bbRequester = UTF.encode(pseudo);
+               var bbTarget = UTF.encode(authentification[0]);
+               var bbRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
+                     + bbTarget.remaining());
+               bbRequestPrivate.put((byte) 5).putInt(bbRequester.remaining()).put(bbRequester)
+                     .putInt(bbTarget.remaining()).put(bbTarget);
+               uniqueContext.queueMessage(bbRequestPrivate.flip());
                return;
             default:
                // Message to all
@@ -321,6 +336,24 @@ public class ClientChatOs {
                      case DONE:
                         var message = messageReader.get();
                         System.out.println("Private message from " + message.getPseudo() + ": " + message.getMsg());
+                        messageReader.reset();
+                        break;
+                     case REFILL:
+                        return;
+                     case ERROR:
+                        closed = true;
+                        return;
+                  }
+               }
+               // Request private connexion
+            case 5:
+               bbin.compact();
+               for (; ; ) {
+                  switch (messageReader.process(bbin)) {
+                     case DONE:
+                        var message = messageReader.get();
+                        // TODO answer
+                        System.out.println("Private connexion request from: " + message.getPseudo() +" (answer with /accept or /decline)");
                         messageReader.reset();
                         break;
                      case REFILL:
