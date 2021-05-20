@@ -4,10 +4,12 @@ public class Message {
    private final String pseudo;
    private final String msg;
    private int opcode;
+   private long connectId;
 
    public Message(String pseudo, String message) {
       this.pseudo = pseudo;
       this.msg = message;
+      connectId = -1;
    }
 
    @Override
@@ -32,5 +34,13 @@ public class Message {
 
    public String getMsg() {
       return msg;
+   }
+
+   public void setConnectId(long id) {
+      this.connectId = id;
+   }
+
+   public long getConnectId() {
+      return connectId;
    }
 }

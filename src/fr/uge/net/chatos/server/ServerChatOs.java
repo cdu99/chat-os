@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.Random;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -31,12 +32,14 @@ public class ServerChatOs {
    private final ServerSocketChannel serverSocketChannel;
    private final Selector selector;
    private final HashMap<String, SelectionKey> clients;
+   private final HashMap<Long, PrivateTCPSession> privateSessions;
 
    public ServerChatOs(int port) throws IOException {
       serverSocketChannel = ServerSocketChannel.open();
       serverSocketChannel.bind(new InetSocketAddress(port));
       selector = Selector.open();
       clients = new HashMap<>();
+      privateSessions = new HashMap<>();
    }
 
    public void launch() throws IOException {
@@ -71,6 +74,9 @@ public class ServerChatOs {
             var context = ((Context) key.attachment());
             if (context.pseudo == null) {
                context.doRead();
+               if (context.isPrivate) {
+                  return;
+               }
                if (context.pseudo == null || clients.containsKey(context.pseudo)) {
                   logger.info("Login error");
                   context.sendError(1);
@@ -140,6 +146,50 @@ public class ServerChatOs {
       clients.remove(pseudo);
    }
 
+   private boolean requestPrivateConnexion(String requester, String target) {
+      var targetKey = clients.get(target);
+      if (targetKey == null) {
+         return false;
+      }
+      var targetContext = (Context) targetKey.attachment();
+      var request = new Message(requester, target);
+      request.setOpcode(5);
+      targetContext.queueMessage(request);
+      return true;
+   }
+
+   private boolean declinePrivateConnexion(String requester, String target) {
+      var requesterKey = clients.get(requester);
+      if (requesterKey == null) {
+         return false;
+      }
+      var requesterContext = (Context) requesterKey.attachment();
+      var request = new Message(requester, target);
+      request.setOpcode(7);
+      requesterContext.queueMessage(request);
+      return true;
+   }
+
+   private boolean acceptPrivateConnexion(String requester, String target) {
+      var requesterKey = clients.get(requester);
+      var targetKey = clients.get(target);
+      if (requesterKey == null || targetKey == null) {
+         return false;
+      }
+      var requesterContext = (Context) requesterKey.attachment();
+      var targetContext = (Context) targetKey.attachment();
+      var request = new Message(requester, target);
+      request.setOpcode(8);
+      var connectId = Math.abs(new Random().nextLong());
+
+      privateSessions.put(connectId, new PrivateTCPSession());
+
+      request.setConnectId(connectId);
+      requesterContext.queueMessage(request);
+      targetContext.queueMessage(request);
+      return true;
+   }
+
    public static void main(String[] args) throws NumberFormatException, IOException {
       if (args.length != 1) {
          usage();
@@ -161,6 +211,9 @@ public class ServerChatOs {
       private final SocketChannel sc;
       private final ServerChatOs server;
       private String pseudo;
+
+      private PrivateTCPSession privateTCPSession;
+      private boolean isPrivate;
 
       private final ByteBuffer bbin = ByteBuffer.allocate(BUFFER_SIZE);
       private final ByteBuffer bbout = ByteBuffer.allocate(BUFFER_SIZE);
@@ -184,7 +237,7 @@ public class ServerChatOs {
        * @throws IOException
        */
 
-      private void doRead() throws IOException {
+      public void doRead() throws IOException {
          if (sc.read(bbin) == -1) {
             logger.info("Input stream closed");
             closed = true;
@@ -202,10 +255,32 @@ public class ServerChatOs {
        * to process and after the call
        */
 
-      private void processIn() {
+      private void processIn() throws IOException {
+         if (isPrivate) {
+            privateTCPSession.redirect(sc, bbin);
+            bbin.compact();
+            return;
+         }
+
          if (pseudo == null) {
             bbin.flip();
-            if (bbin.get() != 1) {
+            var opcode = bbin.get();
+            // It's a private connexion
+            if (opcode == 9) {
+               isPrivate = true;
+               var id = bbin.getLong();
+               this.privateTCPSession = server.privateSessions.get(id);
+               if (privateTCPSession.getState() == PrivateTCPSession.State.PENDING) {
+                  privateTCPSession.setFirstClient(sc);
+               } else if (privateTCPSession.getState() == PrivateTCPSession.State.ONE_CONNECTED) {
+                  privateTCPSession.setSecondClient(sc);
+                  privateTCPSession.established();
+                  server.privateSessions.remove(id);
+               }
+               bbin.compact();
+               return;
+            }
+            if (opcode != 1) {
                return;
             }
             bbin.compact();
@@ -263,9 +338,66 @@ public class ServerChatOs {
                            return;
                      }
                   }
+               case 5:
+                  bbin.compact();
+                  for (; ; ) {
+                     // (5) requester target
+                     // pseudo --> requester; msg --> target
+                     switch (messageReader.process(bbin)) {
+                        case DONE:
+                           var message = messageReader.get();
+                           if (!server.requestPrivateConnexion(message.getPseudo(), message.getMsg())) {
+                              sendError(2);
+                           }
+                           messageReader.reset();
+                           break;
+                        case REFILL:
+                           return;
+                        case ERROR:
+                           silentlyClose();
+                           return;
+                     }
+                  }
+               case 7:
+                  bbin.compact();
+                  for (; ; ) {
+                     switch (messageReader.process(bbin)) {
+                        case DONE:
+                           var message = messageReader.get();
+                           if (!server.declinePrivateConnexion(message.getPseudo(), message.getMsg())) {
+                              sendError(2);
+                           }
+                           messageReader.reset();
+                           break;
+                        case REFILL:
+                           return;
+                        case ERROR:
+                           silentlyClose();
+                           return;
+                     }
+                  }
+               case 6:
+                  bbin.compact();
+                  for (; ; ) {
+                     switch (messageReader.process(bbin)) {
+                        case DONE:
+                           var message = messageReader.get();
+                           if (!server.acceptPrivateConnexion(message.getPseudo(), message.getMsg())) {
+                              sendError(2);
+                           }
+                           messageReader.reset();
+                           break;
+                        case REFILL:
+                           return;
+                        case ERROR:
+                           silentlyClose();
+                           return;
+                     }
+                  }
                default:
-                  // TODO Trame erreur
                   logger.info("Unrecognized opcode");
+                  sendError(0);
+                  silentlyClose();
                   return;
             }
          }
@@ -292,10 +424,20 @@ public class ServerChatOs {
             var message = queue.remove();
             var pseudo = UTF.encode(message.getPseudo());
             var msg = UTF.encode(message.getMsg());
-            if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining()) {
-               bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
+
+            if (message.getConnectId() != -1) {
+               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining() + Long.BYTES) {
+                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining())
+                        .put(msg).putLong(message.getConnectId());
+               } else {
+                  queue.add(message);
+               }
             } else {
-               queue.add(message);
+               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining()) {
+                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
+               } else {
+                  queue.add(message);
+               }
             }
          }
       }
