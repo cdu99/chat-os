@@ -98,12 +98,11 @@ public class ClientChatOs {
                var authentification = msg.split(" ", 2);
                if (authentification.length == 1) {
                   // /<pseudo>
-                  if (privateContextMap.containsKey(authentification)) {
-                     // if established
-                     // Close la connexion
-//                     privateContextMap.get(authentification[1]);
-
-                     privateContextMap.remove(authentification);
+                  if (privateContextMap.containsKey(authentification[0])) {
+                     if (privateContextMap.get(authentification[0]).state == State.ESTABLISHED) {
+                        privateContextMap.get(authentification[0]).silentlyClose();
+                        privateContextMap.remove(authentification);
+                     }
                   } else {
                      System.out.println("No private connexion established with: " + authentification[0]);
                   }
@@ -163,7 +162,17 @@ public class ClientChatOs {
                   return;
                }
                // /<pseudo> <line>
-               // Else get PrivateContext key:pseudo from map and send line
+               else {
+                  if (privateContextMap.containsKey(authentification[0])) {
+                     var line = UTF.encode(authentification[1]);
+                     var bb = ByteBuffer.allocate(Integer.BYTES + line.remaining());
+                     bb.putInt(line.remaining()).put(line);
+                     privateContextMap.get(authentification[0]).queueMessage(bb.flip());
+                  }
+                  else {
+                     System.out.println("No private connexion established with: " + authentification[0]);
+                  }
+               }
                return;
             default:
                // Message to all
@@ -541,8 +550,8 @@ public class ClientChatOs {
          updateInterestOps();
       }
 
-      @Override
       public void doWrite() throws IOException {
+         logger.info("ON WRITE");
          bbout.flip();
          sc.write(bbout);
          bbout.compact();
@@ -567,6 +576,7 @@ public class ClientChatOs {
          if (sc.read(bbin) == -1) {
             state = State.CLOSED;
          }
+         logger.info(sc.getLocalAddress()+"");
          processIn();
          updateInterestOps();
       }
@@ -574,15 +584,18 @@ public class ClientChatOs {
       private void processIn() {
          bbin.flip();
          if (state != State.ESTABLISHED) {
+            logger.info("DANS LA LOOUPE");
             if (bbin.get() != 10) {
                System.out.println("ERROR DISCONNECTION");
                silentlyClose();
                return;
             } else {
+               System.out.println("Connexion established");
                state = State.ESTABLISHED;
             }
             bbin.compact();
          } else {
+            // TODO
             logger.info("Bien recu chakal");
             bbin.compact();
          }

@@ -74,6 +74,9 @@ public class ServerChatOs {
             var context = ((Context) key.attachment());
             if (context.pseudo == null) {
                context.doRead();
+               if (context.isPrivate) {
+                  return;
+               }
                if (context.pseudo == null || clients.containsKey(context.pseudo)) {
                   logger.info("Login error");
                   context.sendError(1);
@@ -179,9 +182,7 @@ public class ServerChatOs {
       request.setOpcode(8);
       var connectId = Math.abs(new Random().nextLong());
 
-      // TODO WIP
-      // CREATE SESSION COTE SERV
-      privateSessions.put(connectId, new PrivateTCPSession(connectId, selector));
+      privateSessions.put(connectId, new PrivateTCPSession());
 
       request.setConnectId(connectId);
       requesterContext.queueMessage(request);
@@ -203,13 +204,16 @@ public class ServerChatOs {
 
    /****************** CONTEXT ******************/
 
-   private static class Context implements ServerContext {
+   private static class Context {
 
       private static final Charset UTF = StandardCharsets.UTF_8;
       private final SelectionKey key;
       private final SocketChannel sc;
       private final ServerChatOs server;
       private String pseudo;
+
+      private PrivateTCPSession privateTCPSession;
+      private boolean isPrivate;
 
       private final ByteBuffer bbin = ByteBuffer.allocate(BUFFER_SIZE);
       private final ByteBuffer bbout = ByteBuffer.allocate(BUFFER_SIZE);
@@ -233,7 +237,7 @@ public class ServerChatOs {
        * @throws IOException
        */
 
-      private void doRead() throws IOException {
+      public void doRead() throws IOException {
          if (sc.read(bbin) == -1) {
             logger.info("Input stream closed");
             closed = true;
@@ -251,10 +255,31 @@ public class ServerChatOs {
        * to process and after the call
        */
 
-      private void processIn() {
+      private void processIn() throws IOException {
+         if (isPrivate) {
+            logger.info("TEEEEEEEST");
+            return;
+         }
+
          if (pseudo == null) {
             bbin.flip();
-            if (bbin.get() != 1) {
+            var opcode = bbin.get();
+            // It's a private connexion
+            if (opcode == 9) {
+               isPrivate = true;
+               var id = bbin.getLong();
+               this.privateTCPSession = server.privateSessions.get(id);
+               if (privateTCPSession.getState() == PrivateTCPSession.State.PENDING) {
+                  privateTCPSession.setFirstClient(sc);
+               } else if (privateTCPSession.getState() == PrivateTCPSession.State.ONE_CONNECTED) {
+                  privateTCPSession.setSecondClient(sc);
+                  privateTCPSession.established();
+                  server.privateSessions.remove(id);
+               }
+               bbin.compact();
+               return;
+            }
+            if (opcode != 1) {
                return;
             }
             bbin.compact();
