@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.Random;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -175,8 +176,14 @@ public class ServerChatOs {
       var targetContext = (Context) targetKey.attachment();
       var request = new Message(requester, target);
       request.setOpcode(8);
-//      request.setConnectId();
+      var connectId = Math.abs(new Random().nextLong());
+
+      // TODO
+   // CREATE SESSION COTE SERV
+
+      request.setConnectId(connectId);
       requesterContext.queueMessage(request);
+      targetContext.queueMessage(request);
       return true;
    }
 
@@ -388,10 +395,20 @@ public class ServerChatOs {
             var message = queue.remove();
             var pseudo = UTF.encode(message.getPseudo());
             var msg = UTF.encode(message.getMsg());
-            if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining()) {
-               bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
+
+            if (message.getConnectId() != -1) {
+               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining() + Long.BYTES) {
+                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining())
+                        .put(msg).putLong(message.getConnectId());
+               } else {
+                  queue.add(message);
+               }
             } else {
-               queue.add(message);
+               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining()) {
+                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
+               } else {
+                  queue.add(message);
+               }
             }
          }
       }

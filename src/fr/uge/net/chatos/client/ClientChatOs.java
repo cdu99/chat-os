@@ -1,5 +1,6 @@
 package fr.uge.net.chatos.client;
 
+import fr.uge.net.chatos.reader.IdPrivateReader;
 import fr.uge.net.chatos.reader.MessageReader;
 
 import java.io.IOException;
@@ -96,14 +97,14 @@ public class ClientChatOs {
                var authentification = msg.split(" ", 2);
                if (authentification.length == 1) {
                   // /<pseudo>
-                  if (privateContextMap.containsKey(authentification[1])) {
+                  if (privateContextMap.containsKey(authentification)) {
 
                      // Close la connexion
 //                     privateContextMap.get(authentification[1]);
 
-                     privateContextMap.remove(authentification[1]);
+                     privateContextMap.remove(authentification);
                   } else {
-                     System.out.println("No private connexion established with: " + authentification[1]);
+                     System.out.println("No private connexion established with: " + authentification[0]);
                   }
                   return;
                }
@@ -245,6 +246,7 @@ public class ClientChatOs {
       private final ByteBuffer bbout = ByteBuffer.allocate(BUFFER_SIZE);
       private final Queue<ByteBuffer> queue = new LinkedList<>(); // buffers read-mode
       private final MessageReader messageReader = new MessageReader();
+      private final IdPrivateReader idPrivateReader = new IdPrivateReader();
       private boolean closed = false;
 
       private MainContext(SelectionKey key, String pseudo, ClientChatOs clientChatOs) {
@@ -427,6 +429,24 @@ public class ClientChatOs {
                               " declined");
                         clientChatOs.privateContextMap.remove(message.getMsg());
                         messageReader.reset();
+                        break;
+                     case REFILL:
+                        return;
+                     case ERROR:
+                        closed = true;
+                        return;
+                  }
+               }
+            case 8:
+               bbin.compact();
+               for (; ; ) {
+                  switch (idPrivateReader.process(bbin)){
+                     case DONE:
+                        var idPrivate = idPrivateReader.get();
+                        System.out.println(idPrivate);
+
+                        // TODO DES CHOSES
+                        idPrivateReader.reset();
                         break;
                      case REFILL:
                         return;
