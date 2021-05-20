@@ -24,7 +24,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ClientChatOs {
-   private enum State {PENDING_TARGET, PENDING_REQUESTER, ACCEPTED, ESTABLISHED, CLOSED}
+   private enum State {PENDING_TARGET, PENDING_REQUESTER, ESTABLISHED, CLOSED}
+
    private static final int BUFFER_SIZE = 10_000;
    private static final Logger logger = Logger.getLogger(ClientChatOs.class.getName());
    private static final Charset UTF = StandardCharsets.UTF_8;
@@ -157,7 +158,7 @@ public class ClientChatOs {
                         + bbTarget.remaining());
                   bbRequestPrivate.put((byte) 5).putInt(bbRequester.remaining()).put(bbRequester)
                         .putInt(bbTarget.remaining()).put(bbTarget);
-                  privateContextMap.put(authentification[1], new PrivateContext(State.PENDING_REQUESTER));
+                  privateContextMap.put(authentification[1], new PrivateContext(State.PENDING_REQUESTER, this));
                   mainContext.queueMessage(bbRequestPrivate.flip());
                   return;
                }
@@ -370,7 +371,7 @@ public class ClientChatOs {
        * to process and after the call
        */
 
-      private void processIn() {
+      private void processIn() throws IOException {
          bbin.flip();
          switch (bbin.get()) {
             case 2:
@@ -417,7 +418,8 @@ public class ClientChatOs {
                         var message = messageReader.get();
                         System.out.println("Private connexion request from: " + message.getPseudo() +
                               " (/accept " + message.getPseudo() + " or /decline " + message.getPseudo() + ")");
-                        clientChatOs.privateContextMap.put(message.getPseudo(), new PrivateContext(State.PENDING_TARGET));
+                        clientChatOs.privateContextMap.put(message.getPseudo(),
+                              new PrivateContext(State.PENDING_TARGET, clientChatOs));
                         messageReader.reset();
                         break;
                      case REFILL:
@@ -452,8 +454,14 @@ public class ClientChatOs {
                      case DONE:
                         var idPrivate = idPrivateReader.get();
                         System.out.println(idPrivate);
-
-                        // TODO DES CHOSES
+                        // TODO WIP
+                        if (idPrivate.getRequester().equals(pseudo)) {
+                           clientChatOs.privateContextMap.get(idPrivate.getTarget())
+                                 .initializePrivateConnexion(idPrivate.getConnectId());
+                        } else {
+                           clientChatOs.privateContextMap.get(idPrivate.getRequester())
+                                 .initializePrivateConnexion(idPrivate.getConnectId());
+                        }
                         idPrivateReader.reset();
                         break;
                      case REFILL:
@@ -495,18 +503,18 @@ public class ClientChatOs {
 
    private static class PrivateContext implements ClientContext {
 
-
-      //      private final SelectionKey key;
-//      private final SocketChannel sc;
+      private SelectionKey key;
+      private SocketChannel sc;
       private final ByteBuffer bbin = ByteBuffer.allocate(BUFFER_SIZE);
       private final ByteBuffer bbout = ByteBuffer.allocate(BUFFER_SIZE);
       private final Queue<ByteBuffer> queue = new LinkedList<>(); // buffers read-mode
-      private boolean closed = false;
       private State state;
-      private String pendingLine;
+      private long connectId;
+      private final ClientChatOs clientChatOs;
 
-      public PrivateContext(State state) {
+      public PrivateContext(State state, ClientChatOs clientChatOs) {
          this.state = state;
+         this.clientChatOs = clientChatOs;
       }
 
       public State getState() {
@@ -515,17 +523,103 @@ public class ClientChatOs {
 
       @Override
       public void doConnect() throws IOException {
+         if (!sc.finishConnect()) {
+            return; // the selector gave a bad hint
+         }
 
+         // Sending login private
+         var bb = ByteBuffer.allocate(1 + Long.BYTES);
+         bb.put((byte) 9).putLong(connectId);
+         queueMessage(bb.flip());
+
+         updateInterestOps();
+      }
+
+      private void queueMessage(ByteBuffer bb) {
+         queue.add(bb);
+         processOut();
+         updateInterestOps();
       }
 
       @Override
       public void doWrite() throws IOException {
+         bbout.flip();
+         sc.write(bbout);
+         bbout.compact();
+         processOut();
+         updateInterestOps();
+      }
 
+      private void processOut() {
+         while (!queue.isEmpty()) {
+            var bb = queue.peek();
+            if (bb.remaining() <= bbout.remaining()) {
+               queue.remove();
+               bbout.put(bb);
+            } else {
+               break;
+            }
+         }
       }
 
       @Override
       public void doRead() throws IOException {
+         if (sc.read(bbin) == -1) {
+            state = State.CLOSED;
+         }
+         processIn();
+         updateInterestOps();
+      }
 
+      private void processIn() {
+         bbin.flip();
+         if (state != State.ESTABLISHED) {
+            if (bbin.get() != 10) {
+               System.out.println("ERROR DISCONNECTION");
+               silentlyClose();
+               return;
+            } else {
+               state = State.ESTABLISHED;
+            }
+            bbin.compact();
+         } else {
+            logger.info("Bien recu chakal");
+            bbin.compact();
+         }
+      }
+
+      private void updateInterestOps() {
+         var interesOps = 0;
+         if (state != State.CLOSED && bbin.hasRemaining()) {
+            interesOps = interesOps | SelectionKey.OP_READ;
+         }
+         if (bbout.position() != 0) {
+            interesOps |= SelectionKey.OP_WRITE;
+         }
+         if (interesOps == 0) {
+            silentlyClose();
+            return;
+         }
+         key.interestOps(interesOps);
+      }
+
+      private void silentlyClose() {
+         try {
+            sc.close();
+         } catch (IOException e) {
+            // ignore exception
+         }
+      }
+
+      public void initializePrivateConnexion(long connectId) throws IOException {
+         this.connectId = connectId;
+         sc = SocketChannel.open();
+         sc.configureBlocking(false);
+
+         sc.connect(clientChatOs.serverAddress);
+
+         key = sc.register(clientChatOs.selector, SelectionKey.OP_CONNECT);
+         key.attach(this);
       }
    }
 }

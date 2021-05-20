@@ -32,12 +32,14 @@ public class ServerChatOs {
    private final ServerSocketChannel serverSocketChannel;
    private final Selector selector;
    private final HashMap<String, SelectionKey> clients;
+   private final HashMap<Long, PrivateTCPSession> privateSessions;
 
    public ServerChatOs(int port) throws IOException {
       serverSocketChannel = ServerSocketChannel.open();
       serverSocketChannel.bind(new InetSocketAddress(port));
       selector = Selector.open();
       clients = new HashMap<>();
+      privateSessions = new HashMap<>();
    }
 
    public void launch() throws IOException {
@@ -177,8 +179,9 @@ public class ServerChatOs {
       request.setOpcode(8);
       var connectId = Math.abs(new Random().nextLong());
 
-      // TODO
+      // TODO WIP
       // CREATE SESSION COTE SERV
+      privateSessions.put(connectId, new PrivateTCPSession(connectId, selector));
 
       request.setConnectId(connectId);
       requesterContext.queueMessage(request);
