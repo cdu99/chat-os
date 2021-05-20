@@ -12,7 +12,9 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Scanner;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -32,7 +34,8 @@ public class ClientChatOs {
    private final String pseudo;
    private final Thread console;
    private final ArrayBlockingQueue<String> commandQueue = new ArrayBlockingQueue<>(10);
-   private Context uniqueContext;
+   private MainContext mainContext;
+   private final Map<String, PrivateContext> privateContextMap = new HashMap<>();
 
    public ClientChatOs(String pseudo, InetSocketAddress serverAddress) throws IOException {
       this.serverAddress = serverAddress;
@@ -85,32 +88,79 @@ public class ClientChatOs {
                      + bbPseudo.remaining());
                bbPrivate.put((byte) 3).putInt(bbPseudo.remaining()).put(bbPseudo)
                      .putInt(bbPrivateMsg.remaining()).put(bbPrivateMsg);
-               uniqueContext.queueMessage(bbPrivate.flip());
+               mainContext.queueMessage(bbPrivate.flip());
                return;
+            // TODO WIP
             case '/':
-               // Authentification
                msg = msg.substring(1);
                var authentification = msg.split(" ", 2);
                if (authentification.length == 1) {
-                  // Fermer la connexino private si yen a une
-                  logger.info("Fermer la connexion WIP");
+                  // /<pseudo>
+                  if (privateContextMap.containsKey(authentification[1])) {
+
+                     // Close la connexion
+//                     privateContextMap.get(authentification[1]);
+
+                     privateContextMap.remove(authentification[1]);
+                  } else {
+                     System.out.println("No private connexion established with: " + authentification[1]);
+                  }
                   return;
                }
-               // if ya pas de connexion privé vers target authentification[0]
-               var bbRequester = UTF.encode(pseudo);
-               var bbTarget = UTF.encode(authentification[0]);
-               var bbRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
-                     + bbTarget.remaining());
-               bbRequestPrivate.put((byte) 5).putInt(bbRequester.remaining()).put(bbRequester)
-                     .putInt(bbTarget.remaining()).put(bbTarget);
-               uniqueContext.queueMessage(bbRequestPrivate.flip());
+               // /accept <pseudo>
+               if (authentification[0].equals("accept")) {
+                  if (privateContextMap.containsKey(authentification[1])) {
+                     var bbRequester = UTF.encode(authentification[1]);
+                     var bbTarget = UTF.encode(pseudo);
+                     var bbAcceptRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
+                           + bbTarget.remaining());
+                     bbAcceptRequestPrivate.put((byte) 6).putInt(bbRequester.remaining()).put(bbRequester)
+                           .putInt(bbTarget.remaining()).put(bbTarget);
+                     mainContext.queueMessage(bbAcceptRequestPrivate.flip());
+                     return;
+                  } else {
+                     System.out.println("No private connexion request from: " + authentification[1]);
+                  }
+                  return;
+               }
+               // /decline <pseudo>
+               else if (authentification[0].equals("decline")) {
+                  if (privateContextMap.containsKey(authentification[1])) {
+                     var bbTarget = UTF.encode(pseudo);
+                     var bbRequester = UTF.encode(authentification[1]);
+                     var bbDeclineRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) +
+                           bbRequester.remaining()
+                           + bbTarget.remaining());
+                     bbDeclineRequestPrivate.put((byte) 7).putInt(bbRequester.remaining()).put(bbRequester)
+                           .putInt(bbTarget.remaining()).put(bbTarget);
+                     mainContext.queueMessage(bbDeclineRequestPrivate.flip());
+                     privateContextMap.remove(authentification[1]);
+                     return;
+                  } else {
+                     System.out.println("No private connexion request from: " + authentification[1]);
+                  }
+
+               } else if (authentification[0].equals("connect")) {
+                  // /connect <pseudo>
+                  var bbRequester = UTF.encode(pseudo);
+                  var bbTarget = UTF.encode(authentification[1]);
+                  var bbRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
+                        + bbTarget.remaining());
+                  bbRequestPrivate.put((byte) 5).putInt(bbRequester.remaining()).put(bbRequester)
+                        .putInt(bbTarget.remaining()).put(bbTarget);
+                  privateContextMap.put(authentification[1], new PrivateContext());
+                  mainContext.queueMessage(bbRequestPrivate.flip());
+                  return;
+               }
+               // /<pseudo> <line>
+               // Else get PrivateContext key:pseudo from map and send line
                return;
             default:
                // Message to all
                var bbMsg = UTF.encode(msg);
                var bb = ByteBuffer.allocate(1 + Integer.BYTES + bbMsg.remaining());
                bb.put((byte) 2).putInt(bbMsg.remaining()).put(bbMsg);
-               uniqueContext.queueMessage(bb.flip());
+               mainContext.queueMessage(bb.flip());
          }
       }
    }
@@ -118,8 +168,8 @@ public class ClientChatOs {
    public void launch() throws IOException {
       sc.configureBlocking(false);
       var key = sc.register(selector, SelectionKey.OP_CONNECT);
-      uniqueContext = new Context(key, pseudo);
-      key.attach(uniqueContext);
+      mainContext = new MainContext(key, pseudo, this);
+      key.attach(mainContext);
       sc.connect(serverAddress);
 
       console.start();
@@ -137,13 +187,16 @@ public class ClientChatOs {
    private void treatKey(SelectionKey key) {
       try {
          if (key.isValid() && key.isConnectable()) {
-            uniqueContext.doConnect();
+            var ctx = (Context) key.attachment();
+            ctx.doConnect();
          }
          if (key.isValid() && key.isWritable()) {
-            uniqueContext.doWrite();
+            var ctx = (Context) key.attachment();
+            ctx.doWrite();
          }
          if (key.isValid() && key.isReadable()) {
-            uniqueContext.doRead();
+            var ctx = (Context) key.attachment();
+            ctx.doRead();
          }
       } catch (IOException ioe) {
          throw new UncheckedIOException(ioe);
@@ -183,8 +236,8 @@ public class ClientChatOs {
 
    /****************** CONTEXT ******************/
 
-   private static class Context {
-
+   private static class MainContext implements Context {
+      private final ClientChatOs clientChatOs;
       private final String pseudo;
       private final SelectionKey key;
       private final SocketChannel sc;
@@ -194,10 +247,11 @@ public class ClientChatOs {
       private final MessageReader messageReader = new MessageReader();
       private boolean closed = false;
 
-      private Context(SelectionKey key, String pseudo) {
+      private MainContext(SelectionKey key, String pseudo, ClientChatOs clientChatOs) {
          this.key = key;
          this.sc = (SocketChannel) key.channel();
          this.pseudo = pseudo;
+         this.clientChatOs = clientChatOs;
       }
 
       public void doConnect() throws IOException {
@@ -275,7 +329,7 @@ public class ClientChatOs {
        * @throws IOException
        */
 
-      private void doWrite() throws IOException {
+      public void doWrite() throws IOException {
          bbout.flip();
          sc.write(bbout);
          bbout.compact();
@@ -291,7 +345,7 @@ public class ClientChatOs {
        *
        * @throws IOException
        */
-      private void doRead() throws IOException {
+      public void doRead() throws IOException {
          if (sc.read(bbin) == -1) {
             closed = true;
          }
@@ -345,15 +399,33 @@ public class ClientChatOs {
                         return;
                   }
                }
-               // Request private connexion
             case 5:
                bbin.compact();
                for (; ; ) {
                   switch (messageReader.process(bbin)) {
                      case DONE:
                         var message = messageReader.get();
-                        // TODO answer
-                        System.out.println("Private connexion request from: " + message.getPseudo() +" (answer with /accept or /decline)");
+                        System.out.println("Private connexion request from: " + message.getPseudo() +
+                              " (/accept " + message.getPseudo() + " or /decline " + message.getPseudo() + ")");
+                        clientChatOs.privateContextMap.put(message.getPseudo(), new PrivateContext());
+                        messageReader.reset();
+                        break;
+                     case REFILL:
+                        return;
+                     case ERROR:
+                        closed = true;
+                        return;
+                  }
+               }
+            case 7:
+               bbin.compact();
+               for (; ; ) {
+                  switch (messageReader.process(bbin)) {
+                     case DONE:
+                        var message = messageReader.get();
+                        System.out.println("Private connexion request with: " + message.getMsg() +
+                              " declined");
+                        clientChatOs.privateContextMap.remove(message.getMsg());
                         messageReader.reset();
                         break;
                      case REFILL:
@@ -365,7 +437,6 @@ public class ClientChatOs {
                }
             default:
                System.out.println("ERROR, DISCONNECTION");
-//               bbin.compact();
                silentlyClose();
                return;
          }
@@ -373,7 +444,7 @@ public class ClientChatOs {
       }
 
       private void treatError(int errorCode) {
-         switch (errorCode){
+         switch (errorCode) {
             case 1:
                System.out.println("Login already used by another client");
                silentlyClose();
@@ -391,6 +462,38 @@ public class ClientChatOs {
          } catch (IOException e) {
             // ignore exception
          }
+      }
+   }
+
+   private static class PrivateContext implements Context {
+      private enum State {PENDING, ACCEPTED, ESTABLISHED, CLOSED}
+
+      //      private final SelectionKey key;
+//      private final SocketChannel sc;
+      private final ByteBuffer bbin = ByteBuffer.allocate(BUFFER_SIZE);
+      private final ByteBuffer bbout = ByteBuffer.allocate(BUFFER_SIZE);
+      private final Queue<ByteBuffer> queue = new LinkedList<>(); // buffers read-mode
+      private boolean closed = false;
+      private State state;
+      private String pendingLine;
+
+      public PrivateContext() {
+         this.state = State.PENDING;
+      }
+
+      @Override
+      public void doConnect() throws IOException {
+
+      }
+
+      @Override
+      public void doWrite() throws IOException {
+
+      }
+
+      @Override
+      public void doRead() throws IOException {
+
       }
    }
 }

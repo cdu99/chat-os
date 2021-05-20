@@ -152,6 +152,33 @@ public class ServerChatOs {
       return true;
    }
 
+   private boolean declinePrivateConnexion(String requester, String target) {
+      var requesterKey = clients.get(requester);
+      if (requesterKey == null) {
+         return false;
+      }
+      var requesterContext = (Context) requesterKey.attachment();
+      var request = new Message(requester, target);
+      request.setOpcode(7);
+      requesterContext.queueMessage(request);
+      return true;
+   }
+
+   // TODO Verifier si y'a le droit
+   private boolean acceptPrivateConnexion(String requester, String target) {
+      var requesterKey = clients.get(requester);
+      var targetKey = clients.get(target);
+      if (requesterKey == null || targetKey == null) {
+         return false;
+      }
+      var requesterContext = (Context) requesterKey.attachment();
+      var targetContext = (Context) targetKey.attachment();
+      var request = new Message(requester, target);
+      request.setOpcode(8);
+//      request.setConnectId();
+      requesterContext.queueMessage(request);
+      return true;
+   }
 
    public static void main(String[] args) throws NumberFormatException, IOException {
       if (args.length != 1) {
@@ -285,6 +312,42 @@ public class ServerChatOs {
                         case DONE:
                            var message = messageReader.get();
                            if (!server.requestPrivateConnexion(message.getPseudo(), message.getMsg())) {
+                              sendError(2);
+                           }
+                           messageReader.reset();
+                           break;
+                        case REFILL:
+                           return;
+                        case ERROR:
+                           silentlyClose();
+                           return;
+                     }
+                  }
+               case 7:
+                  bbin.compact();
+                  for (; ; ) {
+                     switch (messageReader.process(bbin)) {
+                        case DONE:
+                           var message = messageReader.get();
+                           if (!server.declinePrivateConnexion(message.getPseudo(), message.getMsg())) {
+                              sendError(2);
+                           }
+                           messageReader.reset();
+                           break;
+                        case REFILL:
+                           return;
+                        case ERROR:
+                           silentlyClose();
+                           return;
+                     }
+                  }
+               case 6:
+                  bbin.compact();
+                  for (; ; ) {
+                     switch (messageReader.process(bbin)) {
+                        case DONE:
+                           var message = messageReader.get();
+                           if (!server.acceptPrivateConnexion(message.getPseudo(), message.getMsg())) {
                               sendError(2);
                            }
                            messageReader.reset();
