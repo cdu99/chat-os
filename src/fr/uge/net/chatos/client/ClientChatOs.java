@@ -92,16 +92,17 @@ public class ClientChatOs {
                      .putInt(bbPrivateMsg.remaining()).put(bbPrivateMsg);
                mainContext.queueMessage(bbPrivate.flip());
                return;
-            // TODO WIP
             case '/':
                msg = msg.substring(1);
                var authentification = msg.split(" ", 2);
                if (authentification.length == 1) {
                   // /<pseudo>
+                  // Pour fermer la connexion privée
                   if (privateContextMap.containsKey(authentification[0])) {
                      if (privateContextMap.get(authentification[0]).state == State.ESTABLISHED) {
                         privateContextMap.get(authentification[0]).silentlyClose();
-                        privateContextMap.remove(authentification);
+                        privateContextMap.remove(authentification[0]);
+                        System.out.println("Connexion closed");
                      }
                   } else {
                      System.out.println("No private connexion established with: " + authentification[0]);
@@ -109,6 +110,7 @@ public class ClientChatOs {
                   return;
                }
                // /accept <pseudo>
+               // Accepter la demande de connexion
                if (authentification[0].equals("accept")) {
                   if (privateContextMap.containsKey(authentification[1])) {
                      if (privateContextMap.get(authentification[1]).getState() != State.PENDING_TARGET) {
@@ -129,6 +131,7 @@ public class ClientChatOs {
                   return;
                }
                // /decline <pseudo>
+               // Refuser
                else if (authentification[0].equals("decline")) {
                   if (privateContextMap.containsKey(authentification[1])) {
                      if (privateContextMap.get(authentification[1]).getState() != State.PENDING_TARGET) {
@@ -151,6 +154,11 @@ public class ClientChatOs {
 
                } else if (authentification[0].equals("connect")) {
                   // /connect <pseudo>
+                  // Faire une demande de connexion
+                  if (pseudo.equals(authentification[1])) {
+                     System.out.println("Can't create private connexion with yourself");
+                     return;
+                  }
                   var bbRequester = UTF.encode(pseudo);
                   var bbTarget = UTF.encode(authentification[1]);
                   var bbRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
@@ -162,6 +170,7 @@ public class ClientChatOs {
                   return;
                }
                // /<pseudo> <line>
+               // Envoyer line à pseudo via la connexion privée
                else {
                   if (privateContextMap.containsKey(authentification[0])) {
                      var line = UTF.encode(authentification[1]);
@@ -461,8 +470,6 @@ public class ClientChatOs {
                   switch (idPrivateReader.process(bbin)) {
                      case DONE:
                         var idPrivate = idPrivateReader.get();
-                        System.out.println(idPrivate);
-                        // TODO WIP
                         if (idPrivate.getRequester().equals(pseudo)) {
                            clientChatOs.privateContextMap.get(idPrivate.getTarget())
                                  .initializePrivateConnexion(idPrivate.getConnectId());
@@ -496,6 +503,9 @@ public class ClientChatOs {
                return;
             case 2:
                System.out.println("Receiver does not exist");
+               return;
+            case 0:
+               silentlyClose();
                return;
          }
       }
@@ -550,7 +560,6 @@ public class ClientChatOs {
       }
 
       public void doWrite() throws IOException {
-         logger.info("ON WRITE");
          bbout.flip();
          sc.write(bbout);
          bbout.compact();
@@ -575,7 +584,6 @@ public class ClientChatOs {
          if (sc.read(bbin) == -1) {
             state = State.CLOSED;
          }
-         logger.info(sc.getLocalAddress() + "");
          processIn();
          updateInterestOps();
       }
@@ -583,7 +591,6 @@ public class ClientChatOs {
       private void processIn() {
          bbin.flip();
          if (state != State.ESTABLISHED) {
-            logger.info("DANS LA LOOUPE");
             if (bbin.get() != 10) {
                System.out.println("ERROR DISCONNECTION");
                silentlyClose();
@@ -596,7 +603,7 @@ public class ClientChatOs {
          } else {
             var size = bbin.getInt();
             var bb = ByteBuffer.allocate(size);
-            for (var i=0; i<size;i++){
+            for (var i = 0; i < size; i++) {
                bb.put(bbin.get());
             }
             System.out.println(UTF.decode(bb.flip()).toString());

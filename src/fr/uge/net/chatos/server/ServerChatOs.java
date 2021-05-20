@@ -395,8 +395,9 @@ public class ServerChatOs {
                      }
                   }
                default:
-                  // TODO Trame erreur
                   logger.info("Unrecognized opcode");
+                  sendError(0);
+                  silentlyClose();
                   return;
             }
          }
