@@ -168,8 +168,7 @@ public class ClientChatOs {
                      var bb = ByteBuffer.allocate(Integer.BYTES + line.remaining());
                      bb.putInt(line.remaining()).put(line);
                      privateContextMap.get(authentification[0]).queueMessage(bb.flip());
-                  }
-                  else {
+                  } else {
                      System.out.println("No private connexion established with: " + authentification[0]);
                   }
                }
@@ -576,7 +575,7 @@ public class ClientChatOs {
          if (sc.read(bbin) == -1) {
             state = State.CLOSED;
          }
-         logger.info(sc.getLocalAddress()+"");
+         logger.info(sc.getLocalAddress() + "");
          processIn();
          updateInterestOps();
       }
@@ -595,8 +594,12 @@ public class ClientChatOs {
             }
             bbin.compact();
          } else {
-            // TODO
-            logger.info("Bien recu chakal");
+            var size = bbin.getInt();
+            var bb = ByteBuffer.allocate(size);
+            for (var i=0; i<size;i++){
+               bb.put(bbin.get());
+            }
+            System.out.println(UTF.decode(bb.flip()).toString());
             bbin.compact();
          }
       }

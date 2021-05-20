@@ -17,6 +17,14 @@ public class PrivateTCPSession {
       sc2.write(bb2.flip());
    }
 
+   public void redirect(SocketChannel sc, ByteBuffer bbin) throws IOException {
+      if (sc.equals(sc1)) {
+         sc2.write(bbin.flip());
+      } else {
+         sc1.write(bbin.flip());
+      }
+   }
+
    public enum State {PENDING, ONE_CONNECTED, BOTH_CONNECTED}
 
    ;

@@ -257,7 +257,8 @@ public class ServerChatOs {
 
       private void processIn() throws IOException {
          if (isPrivate) {
-            logger.info("TEEEEEEEST");
+            privateTCPSession.redirect(sc, bbin);
+            bbin.compact();
             return;
          }
 
