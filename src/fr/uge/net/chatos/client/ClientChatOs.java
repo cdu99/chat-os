@@ -24,7 +24,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ClientChatOs {
-
+   private enum State {PENDING_TARGET, PENDING_REQUESTER, ACCEPTED, ESTABLISHED, CLOSED}
    private static final int BUFFER_SIZE = 10_000;
    private static final Logger logger = Logger.getLogger(ClientChatOs.class.getName());
    private static final Charset UTF = StandardCharsets.UTF_8;
@@ -98,7 +98,7 @@ public class ClientChatOs {
                if (authentification.length == 1) {
                   // /<pseudo>
                   if (privateContextMap.containsKey(authentification)) {
-
+                     // if established
                      // Close la connexion
 //                     privateContextMap.get(authentification[1]);
 
@@ -111,6 +111,10 @@ public class ClientChatOs {
                // /accept <pseudo>
                if (authentification[0].equals("accept")) {
                   if (privateContextMap.containsKey(authentification[1])) {
+                     if (privateContextMap.get(authentification[1]).getState() != State.PENDING_TARGET) {
+                        System.out.println("No private connexion request from: " + authentification[1]);
+                        return;
+                     }
                      var bbRequester = UTF.encode(authentification[1]);
                      var bbTarget = UTF.encode(pseudo);
                      var bbAcceptRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
@@ -127,6 +131,10 @@ public class ClientChatOs {
                // /decline <pseudo>
                else if (authentification[0].equals("decline")) {
                   if (privateContextMap.containsKey(authentification[1])) {
+                     if (privateContextMap.get(authentification[1]).getState() != State.PENDING_TARGET) {
+                        System.out.println("No private connexion request from: " + authentification[1]);
+                        return;
+                     }
                      var bbTarget = UTF.encode(pseudo);
                      var bbRequester = UTF.encode(authentification[1]);
                      var bbDeclineRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) +
@@ -149,7 +157,7 @@ public class ClientChatOs {
                         + bbTarget.remaining());
                   bbRequestPrivate.put((byte) 5).putInt(bbRequester.remaining()).put(bbRequester)
                         .putInt(bbTarget.remaining()).put(bbTarget);
-                  privateContextMap.put(authentification[1], new PrivateContext());
+                  privateContextMap.put(authentification[1], new PrivateContext(State.PENDING_REQUESTER));
                   mainContext.queueMessage(bbRequestPrivate.flip());
                   return;
                }
@@ -409,7 +417,7 @@ public class ClientChatOs {
                         var message = messageReader.get();
                         System.out.println("Private connexion request from: " + message.getPseudo() +
                               " (/accept " + message.getPseudo() + " or /decline " + message.getPseudo() + ")");
-                        clientChatOs.privateContextMap.put(message.getPseudo(), new PrivateContext());
+                        clientChatOs.privateContextMap.put(message.getPseudo(), new PrivateContext(State.PENDING_TARGET));
                         messageReader.reset();
                         break;
                      case REFILL:
@@ -440,7 +448,7 @@ public class ClientChatOs {
             case 8:
                bbin.compact();
                for (; ; ) {
-                  switch (idPrivateReader.process(bbin)){
+                  switch (idPrivateReader.process(bbin)) {
                      case DONE:
                         var idPrivate = idPrivateReader.get();
                         System.out.println(idPrivate);
@@ -486,7 +494,7 @@ public class ClientChatOs {
    }
 
    private static class PrivateContext implements Context {
-      private enum State {PENDING, ACCEPTED, ESTABLISHED, CLOSED}
+
 
       //      private final SelectionKey key;
 //      private final SocketChannel sc;
@@ -497,8 +505,12 @@ public class ClientChatOs {
       private State state;
       private String pendingLine;
 
-      public PrivateContext() {
-         this.state = State.PENDING;
+      public PrivateContext(State state) {
+         this.state = state;
+      }
+
+      public State getState() {
+         return state;
       }
 
       @Override
