@@ -196,15 +196,15 @@ public class ClientChatOs {
    private void treatKey(SelectionKey key) {
       try {
          if (key.isValid() && key.isConnectable()) {
-            var ctx = (Context) key.attachment();
+            var ctx = (ClientContext) key.attachment();
             ctx.doConnect();
          }
          if (key.isValid() && key.isWritable()) {
-            var ctx = (Context) key.attachment();
+            var ctx = (ClientContext) key.attachment();
             ctx.doWrite();
          }
          if (key.isValid() && key.isReadable()) {
-            var ctx = (Context) key.attachment();
+            var ctx = (ClientContext) key.attachment();
             ctx.doRead();
          }
       } catch (IOException ioe) {
@@ -245,7 +245,7 @@ public class ClientChatOs {
 
    /****************** CONTEXT ******************/
 
-   private static class MainContext implements Context {
+   private static class MainContext implements ClientContext {
       private final ClientChatOs clientChatOs;
       private final String pseudo;
       private final SelectionKey key;
@@ -493,7 +493,7 @@ public class ClientChatOs {
       }
    }
 
-   private static class PrivateContext implements Context {
+   private static class PrivateContext implements ClientContext {
 
 
       //      private final SelectionKey key;

@@ -165,7 +165,6 @@ public class ServerChatOs {
       return true;
    }
 
-   // TODO Verifier si y'a le droit
    private boolean acceptPrivateConnexion(String requester, String target) {
       var requesterKey = clients.get(requester);
       var targetKey = clients.get(target);
@@ -179,7 +178,7 @@ public class ServerChatOs {
       var connectId = Math.abs(new Random().nextLong());
 
       // TODO
-   // CREATE SESSION COTE SERV
+      // CREATE SESSION COTE SERV
 
       request.setConnectId(connectId);
       requesterContext.queueMessage(request);
@@ -201,7 +200,7 @@ public class ServerChatOs {
 
    /****************** CONTEXT ******************/
 
-   private static class Context {
+   private static class Context implements ServerContext {
 
       private static final Charset UTF = StandardCharsets.UTF_8;
       private final SelectionKey key;
