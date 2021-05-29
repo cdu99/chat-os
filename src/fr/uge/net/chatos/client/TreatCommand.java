@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class TreatCommand {
    private final Map<String, ClientChatOs.PrivateContext> privateContextMap;
@@ -11,6 +12,7 @@ public class TreatCommand {
    private static final Charset UTF = StandardCharsets.UTF_8;
    private final String pseudo;
    private final ClientChatOs ccos;
+   private static final Logger logger = Logger.getLogger(TreatCommand.class.getName());
 
    public TreatCommand(Map<String, ClientChatOs.PrivateContext> privateContextMap, ClientChatOs.MainContext mainContext,
                        String pseudo, ClientChatOs ccos) {

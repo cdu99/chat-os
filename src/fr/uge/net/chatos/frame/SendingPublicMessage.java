@@ -21,4 +21,8 @@ public class SendingPublicMessage implements Frame {
       bb.put(encodedMsg);
       return bb;
    }
+
+   public String getMsg() {
+      return msg;
+   }
 }

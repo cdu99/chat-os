@@ -3,7 +3,6 @@ package fr.uge.net.chatos.reader;
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.Frame;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
-import fr.uge.net.chatos.server.ServerChatOs;
 
 import java.nio.ByteBuffer;
 import java.util.logging.Logger;
@@ -36,10 +35,10 @@ public class FrameReader implements Reader<Frame> {
          gotOpcode = true;
       }
       if (gotOpcode) {
+         bb.compact();
          switch (opcode) {
             case 1:
                // client is sending his login
-               bb.compact();
                for (; ; ) {
                   var status = stringReader.process(bb);
                   switch (status) {

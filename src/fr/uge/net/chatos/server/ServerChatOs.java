@@ -2,6 +2,7 @@ package fr.uge.net.chatos.server;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.SendingPublicMessage;
 import fr.uge.net.chatos.reader.FrameReader;
 import fr.uge.net.chatos.reader.Message;
 import fr.uge.net.chatos.reader.MessageReader;
@@ -426,6 +427,10 @@ public class ServerChatOs {
             var cf = (ConnexionFrame) frame;
             pseudo=cf.getPseudo();
             logger.info("ON A RECU UN PSDEIEUO: "+pseudo);
+         }else
+         if (frame instanceof SendingPublicMessage){
+            var spm = (SendingPublicMessage) frame;
+            server.broadcast(new Message(pseudo, spm.getMsg()));
          }
       }
 
