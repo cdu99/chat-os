@@ -1,5 +1,7 @@
 package fr.uge.net.chatos.client;
 
+import fr.uge.net.chatos.frame.SendingPublicMessage;
+
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -127,10 +129,8 @@ public class TreatCommand {
             return;
          default:
             // Message to all
-            var bbMsg = UTF.encode(msg);
-            var bb = ByteBuffer.allocate(1 + Integer.BYTES + bbMsg.remaining());
-            bb.put((byte) 2).putInt(bbMsg.remaining()).put(bbMsg);
-            mainContext.queueMessage(bb.flip());
+            var publicMessage = new SendingPublicMessage(msg);
+            mainContext.queueMessage(publicMessage.asByteBuffer().flip());
       }
    }
 }

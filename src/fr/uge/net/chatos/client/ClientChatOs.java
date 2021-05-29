@@ -187,10 +187,8 @@ public class ClientChatOs {
          }
 
          // Sending pseudo
-         var bbPseudo = UTF.encode(pseudo);
-         var bb = ByteBuffer.allocate(1 + Integer.BYTES + bbPseudo.remaining());
-         bb.put((byte) 1).putInt(bbPseudo.remaining()).put(bbPseudo);
-         queueMessage(bb.flip());
+         var newConnexio= new ConnexionFrame(pseudo);
+         queueMessage(newConnexio.asByteBuffer().flip());
 
          updateInterestOps();
       }
