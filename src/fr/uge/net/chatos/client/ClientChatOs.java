@@ -1,5 +1,9 @@
 package fr.uge.net.chatos.client;
 
+import fr.uge.net.chatos.frame.ConnexionFrame;
+import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PublicMessage;
+import fr.uge.net.chatos.reader.FrameReader;
 import fr.uge.net.chatos.reader.IdPrivateReader;
 import fr.uge.net.chatos.reader.MessageReader;
 
@@ -158,6 +162,7 @@ public class ClientChatOs {
    /****************** CONTEXT ******************/
 
    static class MainContext implements ClientContext {
+      private final FrameReader fr = new FrameReader();
       private final ClientChatOs clientChatOs;
       private final String pseudo;
       private final SelectionKey key;
@@ -283,109 +288,131 @@ public class ClientChatOs {
        */
 
       private void processIn() throws IOException {
-         bbin.flip();
-         switch (bbin.get()) {
-            case 2:
-               bbin.compact();
-               for (; ; ) {
-                  switch (messageReader.process(bbin)) {
-                     case DONE:
-                        var message = messageReader.get();
-                        System.out.println(message.getPseudo() + ": " + message.getMsg());
-                        messageReader.reset();
-                        break;
-                     case REFILL:
-                        return;
-                     case ERROR:
-                        closed = true;
-                        return;
-                  }
-               }
-            case 0:
-               treatError(bbin.getInt());
-               bbin.compact();
-               break;
-            case 3:
-               bbin.compact();
-               for (; ; ) {
-                  switch (messageReader.process(bbin)) {
-                     case DONE:
-                        var message = messageReader.get();
-                        System.out.println("Private message from " + message.getPseudo() + ": " + message.getMsg());
-                        messageReader.reset();
-                        break;
-                     case REFILL:
-                        return;
-                     case ERROR:
-                        closed = true;
-                        return;
-                  }
-               }
-            case 5:
-               bbin.compact();
-               for (; ; ) {
-                  switch (messageReader.process(bbin)) {
-                     case DONE:
-                        var message = messageReader.get();
-                        System.out.println("Private connexion request from: " + message.getPseudo() +
-                              " (/accept " + message.getPseudo() + " or /decline " + message.getPseudo() + ")");
-                        clientChatOs.privateContextMap.put(message.getPseudo(),
-                              new PrivateContext(State.PENDING_TARGET, clientChatOs));
-                        messageReader.reset();
-                        break;
-                     case REFILL:
-                        return;
-                     case ERROR:
-                        closed = true;
-                        return;
-                  }
-               }
-            case 7:
-               bbin.compact();
-               for (; ; ) {
-                  switch (messageReader.process(bbin)) {
-                     case DONE:
-                        var message = messageReader.get();
-                        System.out.println("Private connexion request with: " + message.getMsg() +
-                              " declined");
-                        clientChatOs.privateContextMap.remove(message.getMsg());
-                        messageReader.reset();
-                        break;
-                     case REFILL:
-                        return;
-                     case ERROR:
-                        closed = true;
-                        return;
-                  }
-               }
-            case 8:
-               bbin.compact();
-               for (; ; ) {
-                  switch (idPrivateReader.process(bbin)) {
-                     case DONE:
-                        var idPrivate = idPrivateReader.get();
-                        if (idPrivate.getRequester().equals(pseudo)) {
-                           clientChatOs.privateContextMap.get(idPrivate.getTarget())
-                                 .initializePrivateConnexion(idPrivate.getConnectId());
-                        } else {
-                           clientChatOs.privateContextMap.get(idPrivate.getRequester())
-                                 .initializePrivateConnexion(idPrivate.getConnectId());
-                        }
-                        idPrivateReader.reset();
-                        break;
-                     case REFILL:
-                        return;
-                     case ERROR:
-                        closed = true;
-                        return;
-                  }
-               }
-            default:
-               System.out.println("ERROR, DISCONNECTION");
-               silentlyClose();
-               return;
+         for(;;){
+            var status = fr.process(bbin);
+            switch (status){
+               case ERROR:
+                  silentlyClose();
+                  return;
+               case REFILL:
+                  return;
+               case DONE:
+                  Frame frame = fr.get();
+                  fr.reset();
+                  treatFrame(frame);
+                  break;
+            }
          }
+//         bbin.flip();
+//         switch (bbin.get()) {
+//            case 2:
+//               bbin.compact();
+//               for (; ; ) {
+//                  switch (messageReader.process(bbin)) {
+//                     case DONE:
+//                        var message = messageReader.get();
+//                        System.out.println(message.getPseudo() + ": " + message.getMsg());
+//                        messageReader.reset();
+//                        break;
+//                     case REFILL:
+//                        return;
+//                     case ERROR:
+//                        closed = true;
+//                        return;
+//                  }
+//               }
+//            case 0:
+//               treatError(bbin.getInt());
+//               bbin.compact();
+//               break;
+//            case 3:
+//               bbin.compact();
+//               for (; ; ) {
+//                  switch (messageReader.process(bbin)) {
+//                     case DONE:
+//                        var message = messageReader.get();
+//                        System.out.println("Private message from " + message.getPseudo() + ": " + message.getMsg());
+//                        messageReader.reset();
+//                        break;
+//                     case REFILL:
+//                        return;
+//                     case ERROR:
+//                        closed = true;
+//                        return;
+//                  }
+//               }
+//            case 5:
+//               bbin.compact();
+//               for (; ; ) {
+//                  switch (messageReader.process(bbin)) {
+//                     case DONE:
+//                        var message = messageReader.get();
+//                        System.out.println("Private connexion request from: " + message.getPseudo() +
+//                              " (/accept " + message.getPseudo() + " or /decline " + message.getPseudo() + ")");
+//                        clientChatOs.privateContextMap.put(message.getPseudo(),
+//                              new PrivateContext(State.PENDING_TARGET, clientChatOs));
+//                        messageReader.reset();
+//                        break;
+//                     case REFILL:
+//                        return;
+//                     case ERROR:
+//                        closed = true;
+//                        return;
+//                  }
+//               }
+//            case 7:
+//               bbin.compact();
+//               for (; ; ) {
+//                  switch (messageReader.process(bbin)) {
+//                     case DONE:
+//                        var message = messageReader.get();
+//                        System.out.println("Private connexion request with: " + message.getMsg() +
+//                              " declined");
+//                        clientChatOs.privateContextMap.remove(message.getMsg());
+//                        messageReader.reset();
+//                        break;
+//                     case REFILL:
+//                        return;
+//                     case ERROR:
+//                        closed = true;
+//                        return;
+//                  }
+//               }
+//            case 8:
+//               bbin.compact();
+//               for (; ; ) {
+//                  switch (idPrivateReader.process(bbin)) {
+//                     case DONE:
+//                        var idPrivate = idPrivateReader.get();
+//                        if (idPrivate.getRequester().equals(pseudo)) {
+//                           clientChatOs.privateContextMap.get(idPrivate.getTarget())
+//                                 .initializePrivateConnexion(idPrivate.getConnectId());
+//                        } else {
+//                           clientChatOs.privateContextMap.get(idPrivate.getRequester())
+//                                 .initializePrivateConnexion(idPrivate.getConnectId());
+//                        }
+//                        idPrivateReader.reset();
+//                        break;
+//                     case REFILL:
+//                        return;
+//                     case ERROR:
+//                        closed = true;
+//                        return;
+//                  }
+//               }
+//            default:
+//               System.out.println("ERROR, DISCONNECTION");
+//               silentlyClose();
+//               return;
+//         }
 
+      }
+
+      private void treatFrame(Frame frame) {
+         if (frame instanceof PublicMessage){
+            var pm = (PublicMessage) frame;
+            System.out.println(pm.getPseudo() + ": " + pm.getMsg());;
+         }
       }
 
       private void treatError(int errorCode) {

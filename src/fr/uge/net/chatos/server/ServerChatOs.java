@@ -117,7 +117,7 @@ public class ServerChatOs {
          if (key.attachment() != null) {
             var context = (Context) key.attachment();
             if (context.pseudo != null) {
-               message.setOpcode(2);
+               message.setOpcode(4);
                context.queueMessage(message);
             }
          }

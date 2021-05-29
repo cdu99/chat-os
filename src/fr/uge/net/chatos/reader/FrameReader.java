@@ -2,6 +2,7 @@ package fr.uge.net.chatos.reader;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PublicMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
 
 import java.nio.ByteBuffer;
@@ -19,6 +20,7 @@ public class FrameReader implements Reader<Frame> {
    private boolean gotOpcode;
    private Frame value;
    private final StringReader stringReader = new StringReader();
+   private final MessageReader messageReader=new MessageReader();
 
    @Override
    public ProcessStatus process(ByteBuffer bb) {
@@ -70,6 +72,20 @@ public class FrameReader implements Reader<Frame> {
                      stringReader.reset();
                      return ProcessStatus.DONE;
                }
+            case 4:
+               switch (messageReader.process(bb)) {
+                  case ERROR:
+                     return ProcessStatus.ERROR;
+                  case REFILL:
+                     return ProcessStatus.REFILL;
+                  case DONE:
+                     var message = messageReader.get();
+                     state = State.DONE;
+                     value = new PublicMessage(message.getPseudo(), message.getMsg());
+                     gotOpcode = false;
+                     messageReader.reset();
+                     return ProcessStatus.DONE;
+               }
             default:
                return ProcessStatus.ERROR;
          }
@@ -90,6 +106,7 @@ public class FrameReader implements Reader<Frame> {
       state = State.WAITING;
       // tous les readers reset
       stringReader.reset();
+      messageReader.reset();
       value = null;
    }
 }
