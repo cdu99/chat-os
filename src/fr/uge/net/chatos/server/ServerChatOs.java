@@ -1,5 +1,8 @@
 package fr.uge.net.chatos.server;
 
+import fr.uge.net.chatos.frame.ConnexionFrame;
+import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.reader.FrameReader;
 import fr.uge.net.chatos.reader.Message;
 import fr.uge.net.chatos.reader.MessageReader;
 import fr.uge.net.chatos.reader.StringReader;
@@ -220,6 +223,7 @@ public class ServerChatOs {
       private final Queue<Message> queue = new LinkedList<>();
       private final MessageReader messageReader = new MessageReader();
       private final StringReader stringReader = new StringReader();
+      private final FrameReader fr = new FrameReader();
       private boolean closed = false;
 
       private Context(ServerChatOs server, SelectionKey key) {
@@ -256,150 +260,172 @@ public class ServerChatOs {
        */
 
       private void processIn() throws IOException {
-         if (isPrivate) {
-            privateTCPSession.redirect(sc, bbin);
-            bbin.compact();
-            return;
-         }
-
-         if (pseudo == null) {
-            bbin.flip();
-            var opcode = bbin.get();
-            // It's a private connexion
-            if (opcode == 9) {
-               isPrivate = true;
-               var id = bbin.getLong();
-               this.privateTCPSession = server.privateSessions.get(id);
-               if (privateTCPSession.getState() == PrivateTCPSession.State.PENDING) {
-                  privateTCPSession.setFirstClient(sc);
-               } else if (privateTCPSession.getState() == PrivateTCPSession.State.ONE_CONNECTED) {
-                  privateTCPSession.setSecondClient(sc);
-                  privateTCPSession.established();
-                  server.privateSessions.remove(id);
-               }
-               bbin.compact();
-               return;
-            }
-            if (opcode != 1) {
-               return;
-            }
-            bbin.compact();
-            for (; ; ) {
-               var status = stringReader.process(bbin);
-               switch (status) {
-                  case DONE:
-                     pseudo = stringReader.get();
-                     stringReader.reset();
-                     break;
-                  case REFILL:
-                     return;
-                  case ERROR:
-                     silentlyClose();
-                     return;
-               }
-            }
-         } else {
-            bbin.flip();
-            switch (bbin.get()) {
-               case 2:
-                  bbin.compact();
-                  for (; ; ) {
-                     switch (stringReader.process(bbin)) {
-                        case DONE:
-                           var msg = stringReader.get();
-                           server.broadcast(new Message(pseudo, msg));
-                           stringReader.reset();
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               case 3:
-                  bbin.compact();
-                  for (; ; ) {
-                     switch (messageReader.process(bbin)) {
-                        case DONE:
-                           var message = messageReader.get();
-                           var receiver = message.getPseudo();
-                           var msg = message.getMsg();
-                           var isReceiverPresent = server.privateMessage(pseudo, receiver, msg);
-                           messageReader.reset();
-                           if (!isReceiverPresent) {
-                              sendError(2);
-                           }
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               case 5:
-                  bbin.compact();
-                  for (; ; ) {
-                     // (5) requester target
-                     // pseudo --> requester; msg --> target
-                     switch (messageReader.process(bbin)) {
-                        case DONE:
-                           var message = messageReader.get();
-                           if (!server.requestPrivateConnexion(message.getPseudo(), message.getMsg())) {
-                              sendError(2);
-                           }
-                           messageReader.reset();
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               case 7:
-                  bbin.compact();
-                  for (; ; ) {
-                     switch (messageReader.process(bbin)) {
-                        case DONE:
-                           var message = messageReader.get();
-                           if (!server.declinePrivateConnexion(message.getPseudo(), message.getMsg())) {
-                              sendError(2);
-                           }
-                           messageReader.reset();
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               case 6:
-                  bbin.compact();
-                  for (; ; ) {
-                     switch (messageReader.process(bbin)) {
-                        case DONE:
-                           var message = messageReader.get();
-                           if (!server.acceptPrivateConnexion(message.getPseudo(), message.getMsg())) {
-                              sendError(2);
-                           }
-                           messageReader.reset();
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               default:
-                  logger.info("Unrecognized opcode");
-                  sendError(0);
+         for(;;){
+            var status = fr.process(bbin);
+            switch (status){
+               case ERROR:
                   silentlyClose();
                   return;
+               case REFILL:
+                  return;
+               case DONE:
+                  Frame frame = fr.get();
+                  fr.reset();
+                  treatFrame(frame);
+                  break;
             }
+         }
+//         if (isPrivate) {
+//            privateTCPSession.redirect(sc, bbin);
+//            bbin.compact();
+//            return;
+//         }
+//
+//         if (pseudo == null) {
+//            bbin.flip();
+//            var opcode = bbin.get();
+//            // It's a private connexion
+//            if (opcode == 9) {
+//               isPrivate = true;
+//               var id = bbin.getLong();
+//               this.privateTCPSession = server.privateSessions.get(id);
+//               if (privateTCPSession.getState() == PrivateTCPSession.State.PENDING) {
+//                  privateTCPSession.setFirstClient(sc);
+//               } else if (privateTCPSession.getState() == PrivateTCPSession.State.ONE_CONNECTED) {
+//                  privateTCPSession.setSecondClient(sc);
+//                  privateTCPSession.established();
+//                  server.privateSessions.remove(id);
+//               }
+//               bbin.compact();
+//               return;
+//            }
+//            if (opcode != 1) {
+//               return;
+//            }
+//            bbin.compact();
+//            for (; ; ) {
+//               var status = stringReader.process(bbin);
+//               switch (status) {
+//                  case DONE:
+//                     pseudo = stringReader.get();
+//                     stringReader.reset();
+//                     break;
+//                  case REFILL:
+//                     return;
+//                  case ERROR:
+//                     silentlyClose();
+//                     return;
+//               }
+//            }
+//         } else {
+//            bbin.flip();
+//            switch (bbin.get()) {
+//               case 2:
+//                  bbin.compact();
+//                  for (; ; ) {
+//                     switch (stringReader.process(bbin)) {
+//                        case DONE:
+//                           var msg = stringReader.get();
+//                           server.broadcast(new Message(pseudo, msg));
+//                           stringReader.reset();
+//                           break;
+//                        case REFILL:
+//                           return;
+//                        case ERROR:
+//                           silentlyClose();
+//                           return;
+//                     }
+//                  }
+//               case 3:
+//                  bbin.compact();
+//                  for (; ; ) {
+//                     switch (messageReader.process(bbin)) {
+//                        case DONE:
+//                           var message = messageReader.get();
+//                           var receiver = message.getPseudo();
+//                           var msg = message.getMsg();
+//                           var isReceiverPresent = server.privateMessage(pseudo, receiver, msg);
+//                           messageReader.reset();
+//                           if (!isReceiverPresent) {
+//                              sendError(2);
+//                           }
+//                           break;
+//                        case REFILL:
+//                           return;
+//                        case ERROR:
+//                           silentlyClose();
+//                           return;
+//                     }
+//                  }
+//               case 5:
+//                  bbin.compact();
+//                  for (; ; ) {
+//                     // (5) requester target
+//                     // pseudo --> requester; msg --> target
+//                     switch (messageReader.process(bbin)) {
+//                        case DONE:
+//                           var message = messageReader.get();
+//                           if (!server.requestPrivateConnexion(message.getPseudo(), message.getMsg())) {
+//                              sendError(2);
+//                           }
+//                           messageReader.reset();
+//                           break;
+//                        case REFILL:
+//                           return;
+//                        case ERROR:
+//                           silentlyClose();
+//                           return;
+//                     }
+//                  }
+//               case 7:
+//                  bbin.compact();
+//                  for (; ; ) {
+//                     switch (messageReader.process(bbin)) {
+//                        case DONE:
+//                           var message = messageReader.get();
+//                           if (!server.declinePrivateConnexion(message.getPseudo(), message.getMsg())) {
+//                              sendError(2);
+//                           }
+//                           messageReader.reset();
+//                           break;
+//                        case REFILL:
+//                           return;
+//                        case ERROR:
+//                           silentlyClose();
+//                           return;
+//                     }
+//                  }
+//               case 6:
+//                  bbin.compact();
+//                  for (; ; ) {
+//                     switch (messageReader.process(bbin)) {
+//                        case DONE:
+//                           var message = messageReader.get();
+//                           if (!server.acceptPrivateConnexion(message.getPseudo(), message.getMsg())) {
+//                              sendError(2);
+//                           }
+//                           messageReader.reset();
+//                           break;
+//                        case REFILL:
+//                           return;
+//                        case ERROR:
+//                           silentlyClose();
+//                           return;
+//                     }
+//                  }
+//               default:
+//                  logger.info("Unrecognized opcode");
+//                  sendError(0);
+//                  silentlyClose();
+//                  return;
+//            }
+         }
+
+      private void treatFrame(Frame frame) {
+         if (frame instanceof ConnexionFrame){
+            var cf = (ConnexionFrame) frame;
+            pseudo=cf.getPseudo();
+            logger.info("ON A RECU UN PSDEIEUO: "+pseudo);
          }
       }
 
