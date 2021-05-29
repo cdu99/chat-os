@@ -1,7 +1,9 @@
 package fr.uge.net.chatos.client;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
+import fr.uge.net.chatos.frame.ErrorFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.PublicMessage;
 import fr.uge.net.chatos.reader.FrameReader;
 import fr.uge.net.chatos.reader.IdPrivateReader;
@@ -187,7 +189,7 @@ public class ClientChatOs {
          }
 
          // Sending pseudo
-         var newConnexio= new ConnexionFrame(pseudo);
+         var newConnexio = new ConnexionFrame(pseudo);
          queueMessage(newConnexio.asByteBuffer().flip());
 
          updateInterestOps();
@@ -286,9 +288,9 @@ public class ClientChatOs {
        */
 
       private void processIn() throws IOException {
-         for(;;){
+         for (; ; ) {
             var status = fr.process(bbin);
-            switch (status){
+            switch (status) {
                case ERROR:
                   silentlyClose();
                   return;
@@ -407,10 +409,27 @@ public class ClientChatOs {
       }
 
       private void treatFrame(Frame frame) {
-         if (frame instanceof PublicMessage){
+         if (frame instanceof PublicMessage) {
             var pm = (PublicMessage) frame;
-            System.out.println(pm.getPseudo() + ": " + pm.getMsg());;
+            System.out.println(pm.getPseudo() + ": " + pm.getMsg());
+
+         } else if (frame instanceof PrivateMessage) {
+            var pm = (PrivateMessage) frame;
+            System.out.println("Private message from " + pm.getPseudo() + ": " + pm.getMsg());
+         }else if (frame instanceof ErrorFrame) {
+            var ef = (ErrorFrame) frame;
+            var efCode = ef.getCode();
+            if (efCode == 1) {
+               System.out.println("Login already used by another client");
+               silentlyClose();
+               closed = true;
+               return;
+            } else if (efCode == 2) {
+               System.out.println("Receiver does not exist");
+               return;
+            }
          }
+
       }
 
       private void treatError(int errorCode) {

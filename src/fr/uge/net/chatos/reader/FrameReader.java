@@ -1,7 +1,9 @@
 package fr.uge.net.chatos.reader;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
+import fr.uge.net.chatos.frame.ErrorFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.PublicMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
 
@@ -20,7 +22,8 @@ public class FrameReader implements Reader<Frame> {
    private boolean gotOpcode;
    private Frame value;
    private final StringReader stringReader = new StringReader();
-   private final MessageReader messageReader=new MessageReader();
+   private final MessageReader messageReader = new MessageReader();
+   private final IntReader intReader = new IntReader();
 
    @Override
    public ProcessStatus process(ByteBuffer bb) {
@@ -86,6 +89,35 @@ public class FrameReader implements Reader<Frame> {
                      messageReader.reset();
                      return ProcessStatus.DONE;
                }
+               // a client is sending pm
+            case 3:
+               switch (messageReader.process(bb)) {
+                  case ERROR:
+                     return ProcessStatus.ERROR;
+                  case REFILL:
+                     return ProcessStatus.REFILL;
+                  case DONE:
+                     var message = messageReader.get();
+                     state = State.DONE;
+                     value = new PrivateMessage(message.getPseudo(), message.getMsg());
+                     gotOpcode = false;
+                     messageReader.reset();
+                     return ProcessStatus.DONE;
+               }
+            case 0:
+               switch (intReader.process(bb)){
+               case ERROR:
+                  return ProcessStatus.ERROR;
+               case REFILL:
+                  return ProcessStatus.REFILL;
+               case DONE:
+                  var code = intReader.get();
+                  state = State.DONE;
+                  value = new ErrorFrame(code);
+                  gotOpcode = false;
+                  intReader.reset();
+                  return ProcessStatus.DONE;
+            }
             default:
                return ProcessStatus.ERROR;
          }
@@ -106,6 +138,7 @@ public class FrameReader implements Reader<Frame> {
       state = State.WAITING;
       // tous les readers reset
       stringReader.reset();
+      intReader.reset();
       messageReader.reset();
       value = null;
    }

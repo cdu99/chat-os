@@ -2,6 +2,7 @@ package fr.uge.net.chatos.server;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
 import fr.uge.net.chatos.reader.FrameReader;
 import fr.uge.net.chatos.reader.Message;
@@ -261,9 +262,9 @@ public class ServerChatOs {
        */
 
       private void processIn() throws IOException {
-         for(;;){
+         for (; ; ) {
             var status = fr.process(bbin);
-            switch (status){
+            switch (status) {
                case ERROR:
                   silentlyClose();
                   return;
@@ -420,17 +421,23 @@ public class ServerChatOs {
 //                  silentlyClose();
 //                  return;
 //            }
-         }
+      }
 
       private void treatFrame(Frame frame) {
-         if (frame instanceof ConnexionFrame){
+         if (frame instanceof ConnexionFrame) {
             var cf = (ConnexionFrame) frame;
-            pseudo=cf.getPseudo();
-            logger.info("ON A RECU UN PSDEIEUO: "+pseudo);
-         }else
-         if (frame instanceof SendingPublicMessage){
+            pseudo = cf.getPseudo();
+            logger.info("ON A RECU UN PSDEIEUO: " + pseudo);
+         } else if (frame instanceof SendingPublicMessage) {
             var spm = (SendingPublicMessage) frame;
             server.broadcast(new Message(pseudo, spm.getMsg()));
+         } else if (frame instanceof PrivateMessage) {
+            var pm = (PrivateMessage) frame;
+            var isReceiverPresent = server.privateMessage(pseudo, pm.getPseudo(), pm.getMsg());
+            if (!isReceiverPresent) {
+               logger.info("SENDERRROR");
+               sendError(2);
+            }
          }
       }
 

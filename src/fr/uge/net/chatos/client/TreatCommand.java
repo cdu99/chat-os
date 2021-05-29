@@ -1,5 +1,6 @@
 package fr.uge.net.chatos.client;
 
+import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
 
 import java.nio.ByteBuffer;
@@ -29,13 +30,8 @@ public class TreatCommand {
          case '@':
             msg = msg.substring(1);
             var privateMessage = msg.split(" ", 2);
-            var bbPrivateMsg = UTF.encode(privateMessage[1]);
-            var bbPseudo = UTF.encode(privateMessage[0]);
-            var bbPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbPrivateMsg.remaining()
-                  + bbPseudo.remaining());
-            bbPrivate.put((byte) 3).putInt(bbPseudo.remaining()).put(bbPseudo)
-                  .putInt(bbPrivateMsg.remaining()).put(bbPrivateMsg);
-            mainContext.queueMessage(bbPrivate.flip());
+            var privateMsg = new PrivateMessage(privateMessage[0], privateMessage[1]);
+            mainContext.queueMessage(privateMsg.asByteBuffer().flip());
             return;
          case '/':
             msg = msg.substring(1);
