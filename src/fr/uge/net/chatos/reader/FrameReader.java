@@ -3,6 +3,7 @@ package fr.uge.net.chatos.reader;
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.ErrorFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PrivateConnexionRequest;
 import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.PublicMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
@@ -104,6 +105,7 @@ public class FrameReader implements Reader<Frame> {
                      messageReader.reset();
                      return ProcessStatus.DONE;
                }
+               // Receive error
             case 0:
                switch (intReader.process(bb)){
                case ERROR:
@@ -118,6 +120,22 @@ public class FrameReader implements Reader<Frame> {
                   intReader.reset();
                   return ProcessStatus.DONE;
             }
+               // Server receiving demande de connexion privée
+            case 5:
+               // pseudo --> requester; msg --> target
+               switch (messageReader.process(bb)){
+                  case ERROR:
+                     return ProcessStatus.ERROR;
+                  case REFILL:
+                     return ProcessStatus.REFILL;
+                  case DONE:
+                     var connexionRequest = messageReader.get();
+                     state = State.DONE;
+                     value = new PrivateConnexionRequest(connexionRequest.getPseudo(), connexionRequest.getMsg());
+                     gotOpcode = false;
+                     messageReader.reset();
+                     return ProcessStatus.DONE;
+               }
             default:
                return ProcessStatus.ERROR;
          }

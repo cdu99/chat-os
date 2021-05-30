@@ -2,6 +2,7 @@ package fr.uge.net.chatos.server;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PrivateConnexionRequest;
 import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
 import fr.uge.net.chatos.reader.FrameReader;
@@ -427,7 +428,6 @@ public class ServerChatOs {
          if (frame instanceof ConnexionFrame) {
             var cf = (ConnexionFrame) frame;
             pseudo = cf.getPseudo();
-            logger.info("ON A RECU UN PSDEIEUO: " + pseudo);
          } else if (frame instanceof SendingPublicMessage) {
             var spm = (SendingPublicMessage) frame;
             server.broadcast(new Message(pseudo, spm.getMsg()));
@@ -435,7 +435,12 @@ public class ServerChatOs {
             var pm = (PrivateMessage) frame;
             var isReceiverPresent = server.privateMessage(pseudo, pm.getPseudo(), pm.getMsg());
             if (!isReceiverPresent) {
-               logger.info("SENDERRROR");
+               sendError(2);
+            }
+         } else if (frame instanceof PrivateConnexionRequest) {
+            logger.info("on arrive la");
+            var pcr = (PrivateConnexionRequest) frame;
+            if (!server.requestPrivateConnexion(pcr.getRequester(), pcr.getReceiver())) {
                sendError(2);
             }
          }

@@ -3,6 +3,7 @@ package fr.uge.net.chatos.client;
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.ErrorFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PrivateConnexionRequest;
 import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.PublicMessage;
 import fr.uge.net.chatos.reader.FrameReader;
@@ -416,7 +417,7 @@ public class ClientChatOs {
          } else if (frame instanceof PrivateMessage) {
             var pm = (PrivateMessage) frame;
             System.out.println("Private message from " + pm.getPseudo() + ": " + pm.getMsg());
-         }else if (frame instanceof ErrorFrame) {
+         } else if (frame instanceof ErrorFrame) {
             var ef = (ErrorFrame) frame;
             var efCode = ef.getCode();
             if (efCode == 1) {
@@ -428,6 +429,12 @@ public class ClientChatOs {
                System.out.println("Receiver does not exist");
                return;
             }
+         } else if (frame instanceof PrivateConnexionRequest) {
+            var pcr = (PrivateConnexionRequest) frame;
+            System.out.println("Private connexion request from: " + pcr.getRequester() +
+                  " (/accept " + pcr.getRequester() + " or /decline " + pcr.getRequester() + ")");
+            clientChatOs.privateContextMap.put(pcr.getRequester(),
+                  new PrivateContext(State.PENDING_TARGET, clientChatOs));
          }
 
       }
