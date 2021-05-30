@@ -214,11 +214,12 @@ public class ServerChatOs {
    private static class Context {
 
       private static final Charset UTF = StandardCharsets.UTF_8;
+      private static final int TIMEOUT = 10_000;
       private final SelectionKey key;
       private final SocketChannel sc;
       private final ServerChatOs server;
       private String pseudo;
-
+      private long lastOut;
       private PrivateTCPSession privateTCPSession;
       private boolean isPrivate;
 
@@ -498,7 +499,12 @@ public class ServerChatOs {
             if (bb.remaining() <= bbout.remaining()) {
                queue.remove();
                bbout.put(bb);
+               lastOut = System.currentTimeMillis();
             } else {
+               if (System.currentTimeMillis() - lastOut > TIMEOUT) {
+                  queue.clear();
+                  lastOut = System.currentTimeMillis();
+               }
                break;
             }
          }

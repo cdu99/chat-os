@@ -9,6 +9,21 @@ public class PrivateTCPSession {
    private SocketChannel sc1;
    private SocketChannel sc2;
 
+   public PrivateTCPSession() {
+      state = State.PENDING;
+   }
+
+   public void doRead() throws IOException {
+
+   }
+
+   // processIn
+   // processOut
+   // doWrite
+   // QueueByte
+   // up interdsn
+   // silentekncer close
+
    public void established() throws IOException {
       var bb1= ByteBuffer.allocate(1);
       var bb2= ByteBuffer.allocate(1);
@@ -30,10 +45,6 @@ public class PrivateTCPSession {
 
    ;
    private State state;
-
-   public PrivateTCPSession() {
-      state = State.PENDING;
-   }
 
    public void setFirstClient(SocketChannel sc) {
       sc1 = sc;
