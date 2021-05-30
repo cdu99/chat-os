@@ -10,7 +10,9 @@ import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.PublicMessage;
 import fr.uge.net.chatos.reader.FrameReader;
 import fr.uge.net.chatos.reader.IdPrivateReader;
+import fr.uge.net.chatos.reader.IntReader;
 import fr.uge.net.chatos.reader.MessageReader;
+import fr.uge.net.chatos.reader.Reader;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -490,6 +492,7 @@ public class ClientChatOs {
       private final Queue<ByteBuffer> queue = new LinkedList<>(); // buffers read-mode
       public State state;
       private long connectId;
+      public final IntReader intReader=new IntReader();
       private final ClientChatOs clientChatOs;
 
       public PrivateContext(State state, ClientChatOs clientChatOs) {
@@ -551,8 +554,8 @@ public class ClientChatOs {
       }
 
       private void processIn() {
-         bbin.flip();
          if (state != State.ESTABLISHED) {
+            bbin.flip();
             if (bbin.get() != 10) {
                System.out.println("ERROR DISCONNECTION");
                silentlyClose();
@@ -563,13 +566,23 @@ public class ClientChatOs {
             }
             bbin.compact();
          } else {
-            var size = bbin.getInt();
-            var bb = ByteBuffer.allocate(size);
-            for (var i = 0; i < size; i++) {
-               bb.put(bbin.get());
+            switch (intReader.process(bbin)) {
+               case ERROR:
+                  return;
+               case REFILL:
+                  return;
+               case DONE:
+                  var size = intReader.get();
+                  bbin.flip();
+                  var bb = ByteBuffer.allocate(size);
+                  for (var i = 0; i < size; i++) {
+                     bb.put(bbin.get());
+                  }
+                  System.out.println(UTF.decode(bb.flip()).toString());
+                  bbin.compact();
+                  intReader.reset();
+                  break;
             }
-            System.out.println(UTF.decode(bb.flip()).toString());
-            bbin.compact();
          }
       }
 
