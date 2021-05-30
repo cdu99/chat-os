@@ -2,11 +2,13 @@ package fr.uge.net.chatos.server;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.IdPrivateFrame;
 import fr.uge.net.chatos.frame.LoginPrivate;
 import fr.uge.net.chatos.frame.PrivateConnexionAccept;
 import fr.uge.net.chatos.frame.PrivateConnexionDecline;
 import fr.uge.net.chatos.frame.PrivateConnexionRequest;
 import fr.uge.net.chatos.frame.PrivateMessage;
+import fr.uge.net.chatos.frame.PublicMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
 import fr.uge.net.chatos.reader.FrameReader;
 import fr.uge.net.chatos.reader.Message;
@@ -122,8 +124,8 @@ public class ServerChatOs {
          if (key.attachment() != null) {
             var context = (Context) key.attachment();
             if (context.pseudo != null) {
-               message.setOpcode(4);
-               context.queueMessage(message);
+               var publicMessage = new PublicMessage(message.getPseudo(), message.getMsg());
+               context.queueMessage(publicMessage.asByteBuffer().flip());
             }
          }
       }
@@ -136,9 +138,8 @@ public class ServerChatOs {
          return false;
       }
       var context = (Context) receiverKey.attachment();
-      var message = new Message(sender, msg);
-      message.setOpcode(3);
-      context.queueMessage(message);
+      var privateMessage = new PrivateMessage(sender, msg);
+      context.queueMessage(privateMessage.asByteBuffer().flip());
       return true;
    }
 
@@ -161,9 +162,8 @@ public class ServerChatOs {
          return false;
       }
       var targetContext = (Context) targetKey.attachment();
-      var request = new Message(requester, target);
-      request.setOpcode(5);
-      targetContext.queueMessage(request);
+      var pcr = new PrivateConnexionRequest(requester, target);
+      targetContext.queueMessage(pcr.asByteBuffer().flip());
       return true;
    }
 
@@ -173,9 +173,8 @@ public class ServerChatOs {
          return false;
       }
       var requesterContext = (Context) requesterKey.attachment();
-      var request = new Message(requester, target);
-      request.setOpcode(7);
-      requesterContext.queueMessage(request);
+      var pcd = new PrivateConnexionDecline(requester, target);
+      requesterContext.queueMessage(pcd.asByteBuffer().flip());
       return true;
    }
 
@@ -187,15 +186,14 @@ public class ServerChatOs {
       }
       var requesterContext = (Context) requesterKey.attachment();
       var targetContext = (Context) targetKey.attachment();
-      var request = new Message(requester, target);
-      request.setOpcode(8);
-      var connectId = Math.abs(new Random().nextLong());
 
+      var connectId = Math.abs(new Random().nextLong());
       privateSessions.put(connectId, new PrivateTCPSession());
 
-      request.setConnectId(connectId);
-      requesterContext.queueMessage(request);
-      targetContext.queueMessage(request);
+      var idPrivateFrame = new IdPrivateFrame(requester, target, connectId);
+
+      requesterContext.queueMessage(idPrivateFrame.asByteBuffer().flip());
+      targetContext.queueMessage(idPrivateFrame.asByteBuffer().flip());
       return true;
    }
 
@@ -226,7 +224,7 @@ public class ServerChatOs {
 
       private final ByteBuffer bbin = ByteBuffer.allocate(BUFFER_SIZE);
       private final ByteBuffer bbout = ByteBuffer.allocate(BUFFER_SIZE);
-      private final Queue<Message> queue = new LinkedList<>();
+      private final Queue<ByteBuffer> queue = new LinkedList<>();
       private final MessageReader messageReader = new MessageReader();
       private final StringReader stringReader = new StringReader();
       private final FrameReader fr = new FrameReader();
@@ -484,7 +482,7 @@ public class ServerChatOs {
        * @param msg
        */
 
-      private void queueMessage(Message msg) {
+      private void queueMessage(ByteBuffer msg) {
          queue.add(msg);
          processOut();
          updateInterestOps();
@@ -495,26 +493,35 @@ public class ServerChatOs {
        */
 
       private void processOut() {
-         while (!queue.isEmpty() && bbout.hasRemaining()) {
-            var message = queue.remove();
-            var pseudo = UTF.encode(message.getPseudo());
-            var msg = UTF.encode(message.getMsg());
-
-            if (message.getConnectId() != -1) {
-               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining() + Long.BYTES) {
-                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining())
-                        .put(msg).putLong(message.getConnectId());
-               } else {
-                  queue.add(message);
-               }
+         while (!queue.isEmpty()) {
+            var bb = queue.peek();
+            if (bb.remaining() <= bbout.remaining()) {
+               queue.remove();
+               bbout.put(bb);
             } else {
-               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining()) {
-                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
-               } else {
-                  queue.add(message);
-               }
+               break;
             }
          }
+//         while (!queue.isEmpty() && bbout.hasRemaining()) {
+//            var message = queue.remove();
+//            var pseudo = UTF.encode(message.getPseudo());
+//            var msg = UTF.encode(message.getMsg());
+//
+//            if (message.getConnectId() != -1) {
+//               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining() + Long.BYTES) {
+//                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining())
+//                        .put(msg).putLong(message.getConnectId());
+//               } else {
+//                  queue.add(message);
+//               }
+//            } else {
+//               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining()) {
+//                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
+//               } else {
+//                  queue.add(message);
+//               }
+//            }
+//         }
       }
 
       /**

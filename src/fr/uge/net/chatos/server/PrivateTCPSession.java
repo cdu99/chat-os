@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
+// TODO cdla merde
 public class PrivateTCPSession {
    private SocketChannel sc1;
    private SocketChannel sc2;

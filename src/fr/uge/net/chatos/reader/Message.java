@@ -1,5 +1,7 @@
 package fr.uge.net.chatos.reader;
 
+// TODO c'est dla merde
+// Remove opcode and connectId
 public class Message {
    private final String pseudo;
    private final String msg;
