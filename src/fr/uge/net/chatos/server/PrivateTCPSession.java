@@ -7,7 +7,17 @@ import java.nio.channels.SocketChannel;
 public class PrivateTCPSession {
    private SocketChannel sc1;
    private SocketChannel sc2;
+   private ByteBuffer bb1 = ByteBuffer.allocate(1_024);
+   private ByteBuffer bb2 = ByteBuffer.allocate(1_024);
 
+   public PrivateTCPSession() {
+      state = State.PENDING;
+   }
+
+   /**
+    * Sending the frame of opcode 10 to confirm to the client that the private connexion is established
+    * @throws IOException
+    */
    public void established() throws IOException {
       var bb1= ByteBuffer.allocate(1);
       var bb2= ByteBuffer.allocate(1);
@@ -17,11 +27,42 @@ public class PrivateTCPSession {
       sc2.write(bb2.flip());
    }
 
+   /**
+    * Redirecting the bytes of bbin to the other SocketChannel
+    * @param sc
+    * @param bbin
+    * @throws IOException
+    */
    public void redirect(SocketChannel sc, ByteBuffer bbin) throws IOException {
+      bbin.flip();
       if (sc.equals(sc1)) {
-         sc2.write(bbin.flip());
+         while (true) {
+            if (bb1.remaining() >= bbin.remaining()) {
+               bb1.put(bbin);
+               bb1.flip();
+               sc2.write(bb1);
+               bb1.compact();
+               break;
+            } else {
+               var buff2 = ByteBuffer.allocate(bb1.capacity() * 2);
+               buff2.put(bb1);
+               bb1 = buff2;
+            }
+         }
       } else {
-         sc1.write(bbin.flip());
+         while (true) {
+            if (bb2.remaining() >= bbin.remaining()) {
+               bb2.put(bbin);
+               bb2.flip();
+               sc1.write(bb2);
+               bb2.compact();
+               break;
+            } else {
+               var buff2 = ByteBuffer.allocate(bb1.capacity() * 2);
+               buff2.put(bb2);
+               bb2 = buff2;
+            }
+         }
       }
    }
 
@@ -29,10 +70,6 @@ public class PrivateTCPSession {
 
    ;
    private State state;
-
-   public PrivateTCPSession() {
-      state = State.PENDING;
-   }
 
    public void setFirstClient(SocketChannel sc) {
       sc1 = sc;

@@ -1,5 +1,16 @@
 package fr.uge.net.chatos.server;
 
+import fr.uge.net.chatos.frame.ConnexionFrame;
+import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.IdPrivateFrame;
+import fr.uge.net.chatos.frame.LoginPrivate;
+import fr.uge.net.chatos.frame.PrivateConnexionAccept;
+import fr.uge.net.chatos.frame.PrivateConnexionDecline;
+import fr.uge.net.chatos.frame.PrivateConnexionRequest;
+import fr.uge.net.chatos.frame.PrivateMessage;
+import fr.uge.net.chatos.frame.PublicMessage;
+import fr.uge.net.chatos.frame.SendingPublicMessage;
+import fr.uge.net.chatos.reader.FrameReader;
 import fr.uge.net.chatos.reader.Message;
 import fr.uge.net.chatos.reader.MessageReader;
 import fr.uge.net.chatos.reader.StringReader;
@@ -34,6 +45,11 @@ public class ServerChatOs {
    private final HashMap<String, SelectionKey> clients;
    private final HashMap<Long, PrivateTCPSession> privateSessions;
 
+   /**
+    *
+    * @param port
+    * @throws IOException
+    */
    public ServerChatOs(int port) throws IOException {
       serverSocketChannel = ServerSocketChannel.open();
       serverSocketChannel.bind(new InetSocketAddress(port));
@@ -42,6 +58,9 @@ public class ServerChatOs {
       privateSessions = new HashMap<>();
    }
 
+   /**
+    * Launching the server and the selection loop
+    */
    public void launch() throws IOException {
       serverSocketChannel.configureBlocking(false);
       serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
@@ -57,6 +76,10 @@ public class ServerChatOs {
       }
    }
 
+   /**
+    * Treat the key in the selection loop.
+    * @param key
+    */
    private void treatKey(SelectionKey key) {
       printSelectedKey(key);
       try {
@@ -95,6 +118,11 @@ public class ServerChatOs {
       }
    }
 
+   /**
+    * Acceping a client and creating a new context to attach to it
+    * @param key
+    * @throws IOException
+    */
    private void doAccept(SelectionKey key) throws IOException {
       var ssc = (ServerSocketChannel) key.channel();
       var sc = ssc.accept();
@@ -106,33 +134,45 @@ public class ServerChatOs {
       clientKey.attach(new Context(this, clientKey));
    }
 
-   // Message to all
+   /**
+    * Broadcasting message to all clients
+    * @param message
+    */
    private void broadcast(Message message) {
       var keys = selector.keys();
       for (var key : keys) {
          if (key.attachment() != null) {
             var context = (Context) key.attachment();
             if (context.pseudo != null) {
-               message.setOpcode(2);
-               context.queueMessage(message);
+               var publicMessage = new PublicMessage(message.getPseudo(), message.getMsg());
+               context.queueMessage(publicMessage.asByteBuffer().flip());
             }
          }
       }
    }
 
-   // Private message @
+   /**
+    * Sending msg to receiver (private message @)
+    * @param sender
+    * @param receiver
+    * @param msg
+    * @return
+    */
    private boolean privateMessage(String sender, String receiver, String msg) {
       var receiverKey = clients.get(receiver);
       if (receiverKey == null) {
          return false;
       }
       var context = (Context) receiverKey.attachment();
-      var message = new Message(sender, msg);
-      message.setOpcode(3);
-      context.queueMessage(message);
+      var privateMessage = new PrivateMessage(sender, msg);
+      context.queueMessage(privateMessage.asByteBuffer().flip());
       return true;
    }
 
+   /**
+    * Silently close
+    * @param key
+    */
    private void silentlyClose(SelectionKey key) {
       Channel sc = key.channel();
       try {
@@ -142,34 +182,54 @@ public class ServerChatOs {
       }
    }
 
+   /**
+    * Remove a client from the hashmap of clients
+    * @param pseudo
+    */
    private void removeClient(String pseudo) {
       clients.remove(pseudo);
    }
 
+   /**
+    * Sending to target a PrivateConnexionRequest
+    * @param requester
+    * @param target
+    * @return
+    */
    private boolean requestPrivateConnexion(String requester, String target) {
       var targetKey = clients.get(target);
       if (targetKey == null) {
          return false;
       }
       var targetContext = (Context) targetKey.attachment();
-      var request = new Message(requester, target);
-      request.setOpcode(5);
-      targetContext.queueMessage(request);
+      var pcr = new PrivateConnexionRequest(requester, target);
+      targetContext.queueMessage(pcr.asByteBuffer().flip());
       return true;
    }
 
+   /**
+    * Sending to requester a PrivateConnexionDecline from the target
+    * @param requester
+    * @param target
+    * @return
+    */
    private boolean declinePrivateConnexion(String requester, String target) {
       var requesterKey = clients.get(requester);
       if (requesterKey == null) {
          return false;
       }
       var requesterContext = (Context) requesterKey.attachment();
-      var request = new Message(requester, target);
-      request.setOpcode(7);
-      requesterContext.queueMessage(request);
+      var pcd = new PrivateConnexionDecline(requester, target);
+      requesterContext.queueMessage(pcd.asByteBuffer().flip());
       return true;
    }
 
+   /**
+    * Sending the IdPrivateFrame with a unique connectId to the requester and the target
+    * @param requester
+    * @param target
+    * @return
+    */
    private boolean acceptPrivateConnexion(String requester, String target) {
       var requesterKey = clients.get(requester);
       var targetKey = clients.get(target);
@@ -178,15 +238,14 @@ public class ServerChatOs {
       }
       var requesterContext = (Context) requesterKey.attachment();
       var targetContext = (Context) targetKey.attachment();
-      var request = new Message(requester, target);
-      request.setOpcode(8);
-      var connectId = Math.abs(new Random().nextLong());
 
+      var connectId = Math.abs(new Random().nextLong());
       privateSessions.put(connectId, new PrivateTCPSession());
 
-      request.setConnectId(connectId);
-      requesterContext.queueMessage(request);
-      targetContext.queueMessage(request);
+      var idPrivateFrame = new IdPrivateFrame(requester, target, connectId);
+
+      requesterContext.queueMessage(idPrivateFrame.asByteBuffer().flip());
+      targetContext.queueMessage(idPrivateFrame.asByteBuffer().flip());
       return true;
    }
 
@@ -205,21 +264,19 @@ public class ServerChatOs {
    /****************** CONTEXT ******************/
 
    private static class Context {
-
-      private static final Charset UTF = StandardCharsets.UTF_8;
+      private static final int TIMEOUT = 10_000;
       private final SelectionKey key;
       private final SocketChannel sc;
       private final ServerChatOs server;
       private String pseudo;
-
+      private long lastOut;
       private PrivateTCPSession privateTCPSession;
       private boolean isPrivate;
 
       private final ByteBuffer bbin = ByteBuffer.allocate(BUFFER_SIZE);
       private final ByteBuffer bbout = ByteBuffer.allocate(BUFFER_SIZE);
-      private final Queue<Message> queue = new LinkedList<>();
-      private final MessageReader messageReader = new MessageReader();
-      private final StringReader stringReader = new StringReader();
+      private final Queue<ByteBuffer> queue = new LinkedList<>();
+      private final FrameReader fr = new FrameReader();
       private boolean closed = false;
 
       private Context(ServerChatOs server, SelectionKey key) {
@@ -261,144 +318,67 @@ public class ServerChatOs {
             bbin.compact();
             return;
          }
-
-         if (pseudo == null) {
-            bbin.flip();
-            var opcode = bbin.get();
-            // It's a private connexion
-            if (opcode == 9) {
-               isPrivate = true;
-               var id = bbin.getLong();
-               this.privateTCPSession = server.privateSessions.get(id);
-               if (privateTCPSession.getState() == PrivateTCPSession.State.PENDING) {
-                  privateTCPSession.setFirstClient(sc);
-               } else if (privateTCPSession.getState() == PrivateTCPSession.State.ONE_CONNECTED) {
-                  privateTCPSession.setSecondClient(sc);
-                  privateTCPSession.established();
-                  server.privateSessions.remove(id);
-               }
-               bbin.compact();
-               return;
-            }
-            if (opcode != 1) {
-               return;
-            }
-            bbin.compact();
-            for (; ; ) {
-               var status = stringReader.process(bbin);
-               switch (status) {
-                  case DONE:
-                     pseudo = stringReader.get();
-                     stringReader.reset();
-                     break;
-                  case REFILL:
-                     return;
-                  case ERROR:
-                     silentlyClose();
-                     return;
-               }
-            }
-         } else {
-            bbin.flip();
-            switch (bbin.get()) {
-               case 2:
-                  bbin.compact();
-                  for (; ; ) {
-                     switch (stringReader.process(bbin)) {
-                        case DONE:
-                           var msg = stringReader.get();
-                           server.broadcast(new Message(pseudo, msg));
-                           stringReader.reset();
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               case 3:
-                  bbin.compact();
-                  for (; ; ) {
-                     switch (messageReader.process(bbin)) {
-                        case DONE:
-                           var message = messageReader.get();
-                           var receiver = message.getPseudo();
-                           var msg = message.getMsg();
-                           var isReceiverPresent = server.privateMessage(pseudo, receiver, msg);
-                           messageReader.reset();
-                           if (!isReceiverPresent) {
-                              sendError(2);
-                           }
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               case 5:
-                  bbin.compact();
-                  for (; ; ) {
-                     // (5) requester target
-                     // pseudo --> requester; msg --> target
-                     switch (messageReader.process(bbin)) {
-                        case DONE:
-                           var message = messageReader.get();
-                           if (!server.requestPrivateConnexion(message.getPseudo(), message.getMsg())) {
-                              sendError(2);
-                           }
-                           messageReader.reset();
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               case 7:
-                  bbin.compact();
-                  for (; ; ) {
-                     switch (messageReader.process(bbin)) {
-                        case DONE:
-                           var message = messageReader.get();
-                           if (!server.declinePrivateConnexion(message.getPseudo(), message.getMsg())) {
-                              sendError(2);
-                           }
-                           messageReader.reset();
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               case 6:
-                  bbin.compact();
-                  for (; ; ) {
-                     switch (messageReader.process(bbin)) {
-                        case DONE:
-                           var message = messageReader.get();
-                           if (!server.acceptPrivateConnexion(message.getPseudo(), message.getMsg())) {
-                              sendError(2);
-                           }
-                           messageReader.reset();
-                           break;
-                        case REFILL:
-                           return;
-                        case ERROR:
-                           silentlyClose();
-                           return;
-                     }
-                  }
-               default:
-                  logger.info("Unrecognized opcode");
-                  sendError(0);
+         for (; ; ) {
+            var status = fr.process(bbin);
+            switch (status) {
+               case ERROR:
                   silentlyClose();
                   return;
+               case REFILL:
+                  return;
+               case DONE:
+                  Frame frame = fr.get();
+                  fr.reset();
+                  treatFrame(frame);
+                  break;
+            }
+         }
+      }
+
+      /**
+       * Treat frame depending on the type of the frame
+       * @param frame
+       * @throws IOException
+       */
+      private void treatFrame(Frame frame) throws IOException {
+         if (frame instanceof ConnexionFrame) {
+            var cf = (ConnexionFrame) frame;
+            pseudo = cf.getPseudo();
+         } else if (frame instanceof SendingPublicMessage) {
+            var spm = (SendingPublicMessage) frame;
+            server.broadcast(new Message(pseudo, spm.getMsg()));
+         } else if (frame instanceof PrivateMessage) {
+            var pm = (PrivateMessage) frame;
+            var isReceiverPresent = server.privateMessage(pseudo, pm.getPseudo(), pm.getMsg());
+            if (!isReceiverPresent) {
+               sendError(2);
+            }
+         } else if (frame instanceof PrivateConnexionRequest) {
+            var pcr = (PrivateConnexionRequest) frame;
+            if (!server.requestPrivateConnexion(pcr.getRequester(), pcr.getReceiver())) {
+               sendError(2);
+            }
+         } else if (frame instanceof PrivateConnexionAccept) {
+            var pca = (PrivateConnexionAccept) frame;
+            if (!server.acceptPrivateConnexion(pca.getRequester(), pca.getReceiver())) {
+               sendError(2);
+            }
+         } else if (frame instanceof PrivateConnexionDecline) {
+            var pcd = (PrivateConnexionDecline) frame;
+            if (!server.declinePrivateConnexion(pcd.getRequester(), pcd.getReceiver())) {
+               sendError(2);
+            }
+         } else if (frame instanceof LoginPrivate) {
+            var lp = (LoginPrivate) frame;
+            isPrivate = true;
+            var id = lp.getConnectId();
+            this.privateTCPSession = server.privateSessions.get(id);
+            if (privateTCPSession.getState() == PrivateTCPSession.State.PENDING) {
+               privateTCPSession.setFirstClient(sc);
+            } else if (privateTCPSession.getState() == PrivateTCPSession.State.ONE_CONNECTED) {
+               privateTCPSession.setSecondClient(sc);
+               privateTCPSession.established();
+               server.privateSessions.remove(id);
             }
          }
       }
@@ -409,7 +389,7 @@ public class ServerChatOs {
        * @param msg
        */
 
-      private void queueMessage(Message msg) {
+      private void queueMessage(ByteBuffer msg) {
          queue.add(msg);
          processOut();
          updateInterestOps();
@@ -420,24 +400,18 @@ public class ServerChatOs {
        */
 
       private void processOut() {
-         while (!queue.isEmpty() && bbout.hasRemaining()) {
-            var message = queue.remove();
-            var pseudo = UTF.encode(message.getPseudo());
-            var msg = UTF.encode(message.getMsg());
-
-            if (message.getConnectId() != -1) {
-               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining() + Long.BYTES) {
-                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining())
-                        .put(msg).putLong(message.getConnectId());
-               } else {
-                  queue.add(message);
-               }
+         while (!queue.isEmpty()) {
+            var bb = queue.peek();
+            if (bb.remaining() <= bbout.remaining()) {
+               queue.remove();
+               bbout.put(bb);
+               lastOut = System.currentTimeMillis();
             } else {
-               if (bbout.remaining() > 1 + (Integer.BYTES * 2) + pseudo.remaining() + msg.remaining()) {
-                  bbout.put((byte) message.getOpcode()).putInt(pseudo.remaining()).put(pseudo).putInt(msg.remaining()).put(msg);
-               } else {
-                  queue.add(message);
+               if (System.currentTimeMillis() - lastOut > TIMEOUT) {
+                  queue.clear();
+                  lastOut = System.currentTimeMillis();
                }
+               break;
             }
          }
       }
@@ -494,6 +468,11 @@ public class ServerChatOs {
          processOut();
          updateInterestOps();
       }
+
+      /**
+       * Sending an error frame
+       * @param errorCode
+       */
 
       public void sendError(int errorCode) {
          if (bbout.remaining() > 1 + Integer.BYTES) {
