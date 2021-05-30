@@ -4,25 +4,15 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
-// TODO cdla merde
 public class PrivateTCPSession {
    private SocketChannel sc1;
    private SocketChannel sc2;
+   private ByteBuffer bb1 = ByteBuffer.allocate(1_024);
+   private ByteBuffer bb2 = ByteBuffer.allocate(1_024);
 
    public PrivateTCPSession() {
       state = State.PENDING;
    }
-
-   public void doRead() throws IOException {
-
-   }
-
-   // processIn
-   // processOut
-   // doWrite
-   // QueueByte
-   // up interdsn
-   // silentekncer close
 
    public void established() throws IOException {
       var bb1= ByteBuffer.allocate(1);
@@ -34,10 +24,35 @@ public class PrivateTCPSession {
    }
 
    public void redirect(SocketChannel sc, ByteBuffer bbin) throws IOException {
+      bbin.flip();
       if (sc.equals(sc1)) {
-         sc2.write(bbin.flip());
+         while (true) {
+            if (bb1.remaining() >= bbin.remaining()) {
+               bb1.put(bbin);
+               bb1.flip();
+               sc2.write(bb1);
+               bb1.compact();
+               break;
+            } else {
+               var buff2 = ByteBuffer.allocate(bb1.capacity() * 2);
+               buff2.put(bb1);
+               bb1 = buff2;
+            }
+         }
       } else {
-         sc1.write(bbin.flip());
+         while (true) {
+            if (bb2.remaining() >= bbin.remaining()) {
+               bb2.put(bbin);
+               bb2.flip();
+               sc1.write(bb2);
+               bb2.compact();
+               break;
+            } else {
+               var buff2 = ByteBuffer.allocate(bb1.capacity() * 2);
+               buff2.put(bb2);
+               bb2 = buff2;
+            }
+         }
       }
    }
 

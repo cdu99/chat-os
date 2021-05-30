@@ -554,6 +554,7 @@ public class ClientChatOs {
       }
 
       private void processIn() {
+         logger.info("LE STATE"+state);
          if (state != State.ESTABLISHED) {
             bbin.flip();
             if (bbin.get() != 10) {
