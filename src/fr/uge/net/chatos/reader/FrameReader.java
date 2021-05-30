@@ -4,6 +4,7 @@ import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.ErrorFrame;
 import fr.uge.net.chatos.frame.Frame;
 import fr.uge.net.chatos.frame.IdPrivateFrame;
+import fr.uge.net.chatos.frame.LoginPrivate;
 import fr.uge.net.chatos.frame.PrivateConnexionAccept;
 import fr.uge.net.chatos.frame.PrivateConnexionDecline;
 import fr.uge.net.chatos.frame.PrivateConnexionRequest;
@@ -29,6 +30,7 @@ public class FrameReader implements Reader<Frame> {
    private final MessageReader messageReader = new MessageReader();
    private final IntReader intReader = new IntReader();
    private final IdPrivateReader idPrivateReader=new IdPrivateReader();
+   private final LongReader longReader=new LongReader();
 
    @Override
    public ProcessStatus process(ByteBuffer bb) {
@@ -187,6 +189,20 @@ public class FrameReader implements Reader<Frame> {
                      case ERROR:
                         return ProcessStatus.ERROR;
                   }
+            case 9:
+               switch (longReader.process(bb)) {
+                  case DONE:
+                     var conId = longReader.get();
+                     state = State.DONE;
+                     value = new LoginPrivate(conId);
+                     gotOpcode=false;
+                     longReader.reset();
+                     return ProcessStatus.DONE;
+                  case REFILL:
+                     return ProcessStatus.REFILL;
+                  case ERROR:
+                     return ProcessStatus.ERROR;
+               }
             default:
                return ProcessStatus.ERROR;
          }
@@ -207,6 +223,7 @@ public class FrameReader implements Reader<Frame> {
       state = State.WAITING;
       // tous les readers reset
       idPrivateReader.reset();
+      longReader.reset();
       stringReader.reset();
       intReader.reset();
       messageReader.reset();

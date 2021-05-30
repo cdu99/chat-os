@@ -2,6 +2,7 @@ package fr.uge.net.chatos.server;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.LoginPrivate;
 import fr.uge.net.chatos.frame.PrivateConnexionAccept;
 import fr.uge.net.chatos.frame.PrivateConnexionDecline;
 import fr.uge.net.chatos.frame.PrivateConnexionRequest;
@@ -265,6 +266,11 @@ public class ServerChatOs {
        */
 
       private void processIn() throws IOException {
+         if (isPrivate) {
+            privateTCPSession.redirect(sc, bbin);
+            bbin.compact();
+            return;
+         }
          for (; ; ) {
             var status = fr.process(bbin);
             switch (status) {
@@ -426,7 +432,7 @@ public class ServerChatOs {
 //            }
       }
 
-      private void treatFrame(Frame frame) {
+      private void treatFrame(Frame frame) throws IOException {
          if (frame instanceof ConnexionFrame) {
             var cf = (ConnexionFrame) frame;
             pseudo = cf.getPseudo();
@@ -456,6 +462,18 @@ public class ServerChatOs {
             var pcd = (PrivateConnexionDecline) frame;
             if (!server.declinePrivateConnexion(pcd.getRequester(), pcd.getReceiver())) {
                sendError(2);
+            }
+         } else if (frame instanceof LoginPrivate) {
+            var lp = (LoginPrivate) frame;
+            isPrivate = true;
+            var id = lp.getConnectId();
+            this.privateTCPSession = server.privateSessions.get(id);
+            if (privateTCPSession.getState() == PrivateTCPSession.State.PENDING) {
+               privateTCPSession.setFirstClient(sc);
+            } else if (privateTCPSession.getState() == PrivateTCPSession.State.ONE_CONNECTED) {
+               privateTCPSession.setSecondClient(sc);
+               privateTCPSession.established();
+               server.privateSessions.remove(id);
             }
          }
       }
