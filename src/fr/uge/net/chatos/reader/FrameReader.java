@@ -32,6 +32,11 @@ public class FrameReader implements Reader<Frame> {
    private final IdPrivateReader idPrivateReader=new IdPrivateReader();
    private final LongReader longReader=new LongReader();
 
+   /**
+    * Process bb using the first byte (the opcode) and setting value accordingly
+    * @param bb
+    * @return
+    */
    @Override
    public ProcessStatus process(ByteBuffer bb) {
       if (state == State.DONE || state == State.ERROR) {
@@ -210,6 +215,10 @@ public class FrameReader implements Reader<Frame> {
       return ProcessStatus.ERROR;
    }
 
+   /**
+    * Returning value
+    * @return
+    */
    @Override
    public Frame get() {
       if (state != State.DONE) {
@@ -221,7 +230,6 @@ public class FrameReader implements Reader<Frame> {
    @Override
    public void reset() {
       state = State.WAITING;
-      // tous les readers reset
       idPrivateReader.reset();
       longReader.reset();
       stringReader.reset();

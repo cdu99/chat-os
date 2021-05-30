@@ -14,6 +14,10 @@ public class PrivateTCPSession {
       state = State.PENDING;
    }
 
+   /**
+    * Sending the frame of opcode 10 to confirm to the client that the private connexion is established
+    * @throws IOException
+    */
    public void established() throws IOException {
       var bb1= ByteBuffer.allocate(1);
       var bb2= ByteBuffer.allocate(1);
@@ -23,6 +27,12 @@ public class PrivateTCPSession {
       sc2.write(bb2.flip());
    }
 
+   /**
+    * Redirecting the bytes of bbin to the other SocketChannel
+    * @param sc
+    * @param bbin
+    * @throws IOException
+    */
    public void redirect(SocketChannel sc, ByteBuffer bbin) throws IOException {
       bbin.flip();
       if (sc.equals(sc1)) {

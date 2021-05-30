@@ -28,6 +28,17 @@ public class TreatCommand {
       this.mainContext = mainContext;
    }
 
+   /**
+    * Parsing msg to process it:
+    *
+    * @param msg
+    * @<pseudo> <message> to create a private message
+    * <message> to create a message to all
+    * /connect <pseudo> to make a private connexion request
+    * /decline <pseudo> to decline it
+    * /accept <pseudo> to accept it
+    * /<pseudo> <message> to send message via a private tcp connexion to pseudo
+    */
    public void parseCommand(String msg) {
       switch (msg.charAt(0)) {
          case '@':
@@ -61,12 +72,6 @@ public class TreatCommand {
                      System.out.println("No private connexion request from: " + authentification[1]);
                      return;
                   }
-//                  var bbRequester = UTF.encode(authentification[1]);
-//                  var bbTarget = UTF.encode(pseudo);
-//                  var bbAcceptRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
-//                        + bbTarget.remaining());
-//                  bbAcceptRequestPrivate.put((byte) 6).putInt(bbRequester.remaining()).put(bbRequester)
-//                        .putInt(bbTarget.remaining()).put(bbTarget);
                   var acceptRequest = new PrivateConnexionAccept(authentification[1], pseudo);
                   mainContext.queueMessage(acceptRequest.asByteBuffer().flip());
                   return;
@@ -83,13 +88,6 @@ public class TreatCommand {
                      System.out.println("No private connexion request from: " + authentification[1]);
                      return;
                   }
-//                  var bbTarget = UTF.encode(pseudo);
-//                  var bbRequester = UTF.encode(authentification[1]);
-//                  var bbDeclineRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) +
-//                        bbRequester.remaining()
-//                        + bbTarget.remaining());
-//                  bbDeclineRequestPrivate.put((byte) 7).putInt(bbRequester.remaining()).put(bbRequester)
-//                        .putInt(bbTarget.remaining()).put(bbTarget);
                   var declineRequest = new PrivateConnexionDecline(authentification[1], pseudo);
                   mainContext.queueMessage(declineRequest.asByteBuffer().flip());
                   privateContextMap.remove(authentification[1]);
