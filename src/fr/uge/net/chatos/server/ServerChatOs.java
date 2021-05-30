@@ -2,6 +2,8 @@ package fr.uge.net.chatos.server;
 
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.PrivateConnexionAccept;
+import fr.uge.net.chatos.frame.PrivateConnexionDecline;
 import fr.uge.net.chatos.frame.PrivateConnexionRequest;
 import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
@@ -441,6 +443,18 @@ public class ServerChatOs {
             logger.info("on arrive la");
             var pcr = (PrivateConnexionRequest) frame;
             if (!server.requestPrivateConnexion(pcr.getRequester(), pcr.getReceiver())) {
+               sendError(2);
+            }
+         } else if (frame instanceof PrivateConnexionAccept) {
+            logger.info("AKSSEPT");
+            var pca = (PrivateConnexionAccept) frame;
+            if (!server.acceptPrivateConnexion(pca.getRequester(), pca.getReceiver())) {
+               sendError(2);
+            }
+         } else if (frame instanceof PrivateConnexionDecline) {
+            logger.info("DEKLINE");
+            var pcd = (PrivateConnexionDecline) frame;
+            if (!server.declinePrivateConnexion(pcd.getRequester(), pcd.getReceiver())) {
                sendError(2);
             }
          }

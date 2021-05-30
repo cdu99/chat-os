@@ -3,6 +3,8 @@ package fr.uge.net.chatos.client;
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.ErrorFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.IdPrivateFrame;
+import fr.uge.net.chatos.frame.PrivateConnexionDecline;
 import fr.uge.net.chatos.frame.PrivateConnexionRequest;
 import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.PublicMessage;
@@ -409,7 +411,7 @@ public class ClientChatOs {
 
       }
 
-      private void treatFrame(Frame frame) {
+      private void treatFrame(Frame frame) throws IOException {
          if (frame instanceof PublicMessage) {
             var pm = (PublicMessage) frame;
             System.out.println(pm.getPseudo() + ": " + pm.getMsg());
@@ -435,8 +437,23 @@ public class ClientChatOs {
                   " (/accept " + pcr.getRequester() + " or /decline " + pcr.getRequester() + ")");
             clientChatOs.privateContextMap.put(pcr.getRequester(),
                   new PrivateContext(State.PENDING_TARGET, clientChatOs));
+         } else if (frame instanceof PrivateConnexionDecline) {
+            logger.info("WTF");
+            var pcd = (PrivateConnexionDecline) frame;
+            System.out.println("Private connexion request with: " + pcd.getReceiver() +
+                  " declined");
+            clientChatOs.privateContextMap.remove(pcd.getReceiver());
+         } else if (frame instanceof IdPrivateFrame) {
+            logger.info("CONNECT ID");
+            var ipd = (IdPrivateFrame) frame;
+            if (ipd.getRequester().equals(pseudo)) {
+               clientChatOs.privateContextMap.get(ipd.getReceiver())
+                     .initializePrivateConnexion(ipd.getConnectId());
+            } else {
+               clientChatOs.privateContextMap.get(ipd.getRequester())
+                     .initializePrivateConnexion(ipd.getConnectId());
+            }
          }
-
       }
 
       private void treatError(int errorCode) {

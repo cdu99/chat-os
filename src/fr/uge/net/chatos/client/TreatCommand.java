@@ -1,5 +1,8 @@
 package fr.uge.net.chatos.client;
 
+import fr.uge.net.chatos.frame.PrivateConnexionAccept;
+import fr.uge.net.chatos.frame.PrivateConnexionDecline;
+import fr.uge.net.chatos.frame.PrivateConnexionRequest;
 import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.SendingPublicMessage;
 
@@ -58,13 +61,14 @@ public class TreatCommand {
                      System.out.println("No private connexion request from: " + authentification[1]);
                      return;
                   }
-                  var bbRequester = UTF.encode(authentification[1]);
-                  var bbTarget = UTF.encode(pseudo);
-                  var bbAcceptRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
-                        + bbTarget.remaining());
-                  bbAcceptRequestPrivate.put((byte) 6).putInt(bbRequester.remaining()).put(bbRequester)
-                        .putInt(bbTarget.remaining()).put(bbTarget);
-                  mainContext.queueMessage(bbAcceptRequestPrivate.flip());
+//                  var bbRequester = UTF.encode(authentification[1]);
+//                  var bbTarget = UTF.encode(pseudo);
+//                  var bbAcceptRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
+//                        + bbTarget.remaining());
+//                  bbAcceptRequestPrivate.put((byte) 6).putInt(bbRequester.remaining()).put(bbRequester)
+//                        .putInt(bbTarget.remaining()).put(bbTarget);
+                  var acceptRequest = new PrivateConnexionAccept(authentification[1], pseudo);
+                  mainContext.queueMessage(acceptRequest.asByteBuffer().flip());
                   return;
                } else {
                   System.out.println("No private connexion request from: " + authentification[1]);
@@ -79,14 +83,15 @@ public class TreatCommand {
                      System.out.println("No private connexion request from: " + authentification[1]);
                      return;
                   }
-                  var bbTarget = UTF.encode(pseudo);
-                  var bbRequester = UTF.encode(authentification[1]);
-                  var bbDeclineRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) +
-                        bbRequester.remaining()
-                        + bbTarget.remaining());
-                  bbDeclineRequestPrivate.put((byte) 7).putInt(bbRequester.remaining()).put(bbRequester)
-                        .putInt(bbTarget.remaining()).put(bbTarget);
-                  mainContext.queueMessage(bbDeclineRequestPrivate.flip());
+//                  var bbTarget = UTF.encode(pseudo);
+//                  var bbRequester = UTF.encode(authentification[1]);
+//                  var bbDeclineRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) +
+//                        bbRequester.remaining()
+//                        + bbTarget.remaining());
+//                  bbDeclineRequestPrivate.put((byte) 7).putInt(bbRequester.remaining()).put(bbRequester)
+//                        .putInt(bbTarget.remaining()).put(bbTarget);
+                  var declineRequest = new PrivateConnexionDecline(authentification[1], pseudo);
+                  mainContext.queueMessage(declineRequest.asByteBuffer().flip());
                   privateContextMap.remove(authentification[1]);
                   return;
                } else {
@@ -100,14 +105,9 @@ public class TreatCommand {
                   System.out.println("Can't create private connexion with yourself");
                   return;
                }
-               var bbRequester = UTF.encode(pseudo);
-               var bbTarget = UTF.encode(authentification[1]);
-               var bbRequestPrivate = ByteBuffer.allocate(1 + (Integer.BYTES * 2) + bbRequester.remaining()
-                     + bbTarget.remaining());
-               bbRequestPrivate.put((byte) 5).putInt(bbRequester.remaining()).put(bbRequester)
-                     .putInt(bbTarget.remaining()).put(bbTarget);
+               var request = new PrivateConnexionRequest(pseudo, authentification[1]);
                privateContextMap.put(authentification[1], new ClientChatOs.PrivateContext(ClientChatOs.State.PENDING_REQUESTER, ccos));
-               mainContext.queueMessage(bbRequestPrivate.flip());
+               mainContext.queueMessage(request.asByteBuffer().flip());
                return;
             }
             // /<pseudo> <line>

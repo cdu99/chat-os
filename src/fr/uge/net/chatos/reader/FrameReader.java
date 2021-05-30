@@ -3,6 +3,9 @@ package fr.uge.net.chatos.reader;
 import fr.uge.net.chatos.frame.ConnexionFrame;
 import fr.uge.net.chatos.frame.ErrorFrame;
 import fr.uge.net.chatos.frame.Frame;
+import fr.uge.net.chatos.frame.IdPrivateFrame;
+import fr.uge.net.chatos.frame.PrivateConnexionAccept;
+import fr.uge.net.chatos.frame.PrivateConnexionDecline;
 import fr.uge.net.chatos.frame.PrivateConnexionRequest;
 import fr.uge.net.chatos.frame.PrivateMessage;
 import fr.uge.net.chatos.frame.PublicMessage;
@@ -25,6 +28,7 @@ public class FrameReader implements Reader<Frame> {
    private final StringReader stringReader = new StringReader();
    private final MessageReader messageReader = new MessageReader();
    private final IntReader intReader = new IntReader();
+   private final IdPrivateReader idPrivateReader=new IdPrivateReader();
 
    @Override
    public ProcessStatus process(ByteBuffer bb) {
@@ -136,6 +140,53 @@ public class FrameReader implements Reader<Frame> {
                      messageReader.reset();
                      return ProcessStatus.DONE;
                }
+               // Accept pcr
+            case 6:
+               // pseudo --> requester; msg --> target
+               switch (messageReader.process(bb)){
+                  case ERROR:
+                     return ProcessStatus.ERROR;
+                  case REFILL:
+                     return ProcessStatus.REFILL;
+                  case DONE:
+                     var connexionRequest = messageReader.get();
+                     state = State.DONE;
+                     value = new PrivateConnexionAccept(connexionRequest.getPseudo(), connexionRequest.getMsg());
+                     gotOpcode = false;
+                     messageReader.reset();
+                     return ProcessStatus.DONE;
+               }
+               // Decline pcr
+            case 7:
+               // pseudo --> requester; msg --> target
+               switch (messageReader.process(bb)){
+                  case ERROR:
+                     return ProcessStatus.ERROR;
+                  case REFILL:
+                     return ProcessStatus.REFILL;
+                  case DONE:
+                     var connexionRequest = messageReader.get();
+                     state = State.DONE;
+                     value = new PrivateConnexionDecline(connexionRequest.getPseudo(), connexionRequest.getMsg());
+                     gotOpcode = false;
+                     messageReader.reset();
+                     return ProcessStatus.DONE;
+               }
+               // ConnectId
+            case 8:
+               switch (idPrivateReader.process(bb)) {
+                     case DONE:
+                        var idPrivate = idPrivateReader.get();
+                        state = State.DONE;
+                        value = new IdPrivateFrame(idPrivate.getRequester(), idPrivate.getTarget(), idPrivate.getConnectId());
+                        gotOpcode=false;
+                        idPrivateReader.reset();
+                        return ProcessStatus.DONE;
+                     case REFILL:
+                        return ProcessStatus.REFILL;
+                     case ERROR:
+                        return ProcessStatus.ERROR;
+                  }
             default:
                return ProcessStatus.ERROR;
          }
@@ -155,6 +206,7 @@ public class FrameReader implements Reader<Frame> {
    public void reset() {
       state = State.WAITING;
       // tous les readers reset
+      idPrivateReader.reset();
       stringReader.reset();
       intReader.reset();
       messageReader.reset();
